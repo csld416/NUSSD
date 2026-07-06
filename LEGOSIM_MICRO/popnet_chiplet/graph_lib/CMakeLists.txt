@@ -3,7 +3,7 @@
 #https://www.cnblogs.com/binbinjx/p/5626916.html
 #https://www.it1352.com/1984337.html
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required(VERSION 3.5)
 project(graph_lib)
 aux_source_directory(. DIR)
 
@@ -12,10 +12,10 @@ set(CMAKE_BUILD_TYPE Release)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -shared -fPIC")
 
-#find_package(Boost REQUIRED COMPONENTS
-#    graph
-#)
-#include_directories(${Boost_INCLUDE_DIRS})
+find_package(Boost REQUIRED COMPONENTS
+    graph
+)
+include_directories(${Boost_INCLUDE_DIRS})
 
 add_library(mygraph STATIC ${DIR})
 

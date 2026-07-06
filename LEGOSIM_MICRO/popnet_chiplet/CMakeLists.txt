@@ -2,7 +2,7 @@
 
 #https://blog.csdn.net/liitdar/article/details/81144461
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 
 project(popnet)
 

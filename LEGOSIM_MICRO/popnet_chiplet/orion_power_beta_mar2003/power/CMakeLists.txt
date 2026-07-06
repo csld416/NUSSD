@@ -4,7 +4,7 @@
 #https://blog.csdn.net/qq_34796146/article/details/108877159
 #https://qa.1r1g.com/sf/ask/706016181/
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 
 project(orion_power)
 

@@ -166,25 +166,29 @@ bool parseOptions(int argc, char *argv[], Options &options) {
 }
 
 void emitRead(uint64_t cycle, const Options &options, uint64_t bytes) {
-  std::cout << kInterCmdHead << " READ " << cycle << " " << options.npuX
+  std::cout << std::endl << kInterCmdHead << " READ " << cycle << " " << options.npuX
             << " " << options.npuY << " " << options.ssdX << " "
             << options.ssdY << " " << bytes << " 0" << std::endl;
 }
 
 void emitWrite(uint64_t cycle, const Options &options, uint64_t bytes) {
-  std::cout << kInterCmdHead << " WRITE " << cycle << " " << options.ssdX
+  std::cout << std::endl << kInterCmdHead << " WRITE " << cycle << " " << options.ssdX
             << " " << options.ssdY << " " << options.npuX << " "
             << options.npuY << " " << bytes << " 0" << std::endl;
 }
 
 void emitResult(const std::vector<std::string> &items) {
-  std::cout << kInterCmdHead << " RESULT " << items.size();
+  std::cout << std::endl << kInterCmdHead << " RESULT " << items.size();
 
   for (auto &item : items) {
     std::cout << " " << item;
   }
 
   std::cout << std::endl;
+}
+
+void emitCycle(uint64_t cycle) {
+  std::cout << std::endl << kInterCmdHead << " CYCLE " << cycle << std::endl;
 }
 
 bool parseSyncLine(const std::string &line, SyncResponse &response) {
@@ -359,6 +363,7 @@ int main(int argc, char *argv[]) {
               std::to_string(bytesRead), "bytes_written",
               std::to_string(bytesWritten), "completed",
               std::to_string(options.iterations)});
+  emitCycle(currentCycle);
 
   releaseSimpleSSDEngine();
 

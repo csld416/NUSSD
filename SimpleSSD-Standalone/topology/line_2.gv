@@ -1,0 +1,6 @@
+graph line_2
+{
+    edge[weight=1]
+    node[pipeline_stage_delay=1]
+    0--1
+}

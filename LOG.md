@@ -1,5 +1,291 @@
 # Project Log
 
+## 2026-07-06 22:56 CST
+
+### PopNet Phase-2 Integration
+
+- Replaced the no-op phase-2 placeholder in
+  `SimpleSSD-Standalone/legosim_smoke.yml` with a real PopNet invocation:
+
+  ```text
+  /Users/csld/ECLAB/SIM/LEGOSIM_MICRO/popnet_chiplet/build/popnet
+  ```
+
+- PopNet now consumes LegoSim's round-1 `bench.txt` and writes
+  `delayInfo.txt` for the next round:
+
+  ```text
+  -I ../bench.txt
+  -D ../delayInfo.txt
+  ```
+
+- Added a minimal two-node topology:
+
+  ```text
+  SimpleSSD-Standalone/topology/line_2.gv
+  ```
+
+  The graph maps node `0` to the dummy NPU at `(0,0)` and node `1` to the
+  SimpleSSD simlet at `(1,0)`.
+
+### PopNet Build Fixes
+
+- Built PopNet at:
+
+  ```text
+  LEGOSIM_MICRO/popnet_chiplet/build/popnet
+  ```
+
+- Required small CMake portability fixes for the current CMake/Homebrew Boost
+  environment:
+  - `LEGOSIM_MICRO/popnet_chiplet/CMakeLists.txt`
+  - `LEGOSIM_MICRO/popnet_chiplet/orion_power_beta_mar2003/power/CMakeLists.txt`
+  - `LEGOSIM_MICRO/popnet_chiplet/graph_lib/CMakeLists.txt`
+- Updated old `cmake_minimum_required` values to `3.5`.
+- Restored Boost include discovery in `graph_lib`, which needs
+  `boost/graph/adjacency_list.hpp`.
+
+### Protocol Robustness Fix
+
+- Round-2 PopNet testing exposed a parser issue: some SimpleSSD log output can
+  reach stdout without a trailing newline, causing a protocol line such as
+  `[INTERCMD] WRITE ...` to be appended after a log fragment.
+- LegoSim only parses lines that start with `[INTERCMD]`.
+- Updated `SimpleSSD-Standalone/sim/legosim_main.cc` so SimpleSSD protocol
+  emissions start on a fresh line before `[INTERCMD]`.
+
+### Cycle Reporting
+
+- Added final `CYCLE` reports from:
+  - `SimpleSSD-Standalone/sim/dummy_npu_main.cc`
+  - `SimpleSSD-Standalone/sim/legosim_main.cc`
+- This lets LegoSim's existing convergence check use a real benchmark cycle
+  instead of reporting `0` or `nan`.
+
+### Setbacks And Fixes
+
+- Setback: PopNet was not actually built at the expected path.
+
+  ```text
+  LEGOSIM_MICRO/popnet_chiplet/build/popnet
+  ```
+
+  The first check showed the binary was missing, while
+  `LEGOSIM_MICRO/interchiplet/bin/interchiplet` existed.
+
+  Fix: built PopNet from the vendored `popnet_chiplet` source instead of
+  assuming the binary was already present.
+
+- Setback: PopNet could not even configure with the installed CMake.
+
+  The first configure failed because several CMake files used old minimum
+  versions:
+
+  ```text
+  cmake_minimum_required(VERSION 3.0)
+  cmake_minimum_required(VERSION 2.6)
+  ```
+
+  Current CMake rejects compatibility below 3.5.
+
+  Fix: bumped the minimum version to `3.5` in:
+
+  ```text
+  LEGOSIM_MICRO/popnet_chiplet/CMakeLists.txt
+  LEGOSIM_MICRO/popnet_chiplet/orion_power_beta_mar2003/power/CMakeLists.txt
+  LEGOSIM_MICRO/popnet_chiplet/graph_lib/CMakeLists.txt
+  ```
+
+- Setback: PopNet's `graph_lib` failed to compile because it could not find
+  Boost graph headers:
+
+  ```text
+  fatal error: 'boost/graph/adjacency_list.hpp' file not found
+  ```
+
+  The top-level PopNet CMake found Boost, but `graph_lib` had its own Boost
+  discovery commented out.
+
+  Fix: restored `find_package(Boost REQUIRED COMPONENTS graph)` and
+  `include_directories(${Boost_INCLUDE_DIRS})` inside
+  `LEGOSIM_MICRO/popnet_chiplet/graph_lib/CMakeLists.txt`.
+
+- Setback: there was no existing minimal two-node topology for the smoke test.
+
+  The available graphs were mostly 4x4 or 6x6 meshes/stars, which would work
+  but hide whether the two-node mapping was correct.
+
+  Fix: created a minimal undirected DOT graph:
+
+  ```text
+  SimpleSSD-Standalone/topology/line_2.gv
+  ```
+
+  with:
+
+  ```text
+  graph line_2
+  {
+      edge[weight=1]
+      node[pipeline_stage_delay=1]
+      0--1
+  }
+  ```
+
+- Setback: the first PopNet-backed multi-round run reached round 2 but then
+  blocked after the SimpleSSD return path.
+
+  Evidence:
+  - round 2 loaded PopNet records:
+
+    ```text
+    Load 2 delay records.
+    ```
+
+  - dummy NPU emitted:
+
+    ```text
+    [INTERCMD] READ 257 1 0 0 0 4096 0
+    ```
+
+  - SimpleSSD emitted a return `WRITE`, but LegoSim did not complete the pair.
+
+  Investigation showed the SimpleSSD log contained a protocol command appended
+  to the end of a SimpleSSD trace line:
+
+  ```text
+  1492762: ICL: READ ... (8029420)[INTERCMD] WRITE 9874682 ...
+  ```
+
+  LegoSim only parses commands when the line starts with `[INTERCMD]`, so this
+  embedded command was invisible to the coordinator.
+
+  Fix: changed `SimpleSSD-Standalone/sim/legosim_main.cc` so every protocol
+  emission starts with a newline before `[INTERCMD]`. After this, LegoSim could
+  parse the return `WRITE` reliably.
+
+- Setback: before adding final `CYCLE` reports, LegoSim's convergence math was
+  meaningless.
+
+  Earlier runs showed:
+
+  ```text
+  Benchmark elapses 0 cycle.
+  Difference related to pervious round is nan%.
+  ```
+
+  This happened because the smoke endpoints completed their handshake but never
+  emitted a final `CYCLE` command, so LegoSim's global cycle tracker stayed at
+  zero.
+
+  Fix: added final `CYCLE` commands to both:
+
+  ```text
+  SimpleSSD-Standalone/sim/dummy_npu_main.cc
+  SimpleSSD-Standalone/sim/legosim_main.cc
+  ```
+
+  After that, LegoSim reported real cycle counts and could detect convergence.
+
+- Setback: a two-round run is required to see PopNet timing take effect.
+
+  Round 1 has no `delayInfo.txt`, so LegoSim uses its default timing and only
+  records `bench.txt`. PopNet runs in phase 2 and writes the delay records.
+  The PopNet delays are consumed by round 2.
+
+  Fix: validate with `-t 3` or at least `-t 2`, not `-t 1`. The successful run
+  exited after round 2 because convergence was detected before round 3.
+
+### Verification
+
+- Built SimpleSSD endpoints:
+
+  ```text
+  cd /Users/csld/ECLAB/SIM/SimpleSSD-Standalone
+  cmake --build build --target simplessd-legosim simplessd-dummy-npu -j4
+  ```
+
+- Built PopNet:
+
+  ```text
+  cd /Users/csld/ECLAB/SIM/LEGOSIM_MICRO
+  cmake -S popnet_chiplet -B popnet_chiplet/build
+  cmake --build popnet_chiplet/build -j4
+  ```
+
+- Ran the clean PopNet-backed smoke test:
+
+  ```text
+  cd /Users/csld/ECLAB/SIM/SimpleSSD-Standalone
+  mkdir -p popnet_smoke_run2
+  SIMULATOR_ROOT=/Users/csld/ECLAB/SIM/LEGOSIM_MICRO \
+    ../LEGOSIM_MICRO/interchiplet/bin/interchiplet \
+    /Users/csld/ECLAB/SIM/SimpleSSD-Standalone/legosim_smoke.yml \
+    --cwd /Users/csld/ECLAB/SIM/SimpleSSD-Standalone/popnet_smoke_run2 \
+    -t 3 -w 2 -f 2
+  ```
+
+- Round 1 had no delay records and used default timing:
+
+  ```text
+  Benchmark elapses 9875447 cycle.
+  ```
+
+- PopNet phase 2 produced real delay records:
+
+  ```text
+  1 0 1 0 2 256 261
+  9874934 1 0 0 2 256 261
+  ```
+
+- PopNet log reported:
+
+  ```text
+  Transaction count: 2
+  average Delay:        261
+  ```
+
+- Round 2 loaded the PopNet records:
+
+  ```text
+  Load 2 delay records.
+  ```
+
+- Round 2 timing changed from the default baseline and converged:
+
+  ```text
+  Benchmark elapses 9874943 cycle.
+  Difference related to pervious round is 0.005103826928418726%.
+  Quit simulation because simulation cycle has converged.
+  ```
+
+- Round-2 dummy NPU log showed the request completion changed from baseline
+  `514` to PopNet-refined `257`:
+
+  ```text
+  [INTERCMD] WRITE 1 0 0 1 0 4096 0
+  [INTERCMD] READ 257 1 0 0 0 4096 0
+  [INTERCMD] RESULT 4 requests 1 last_cycle 9874943
+  [INTERCMD] CYCLE 9874943
+  ```
+
+- Round-2 SimpleSSD log showed the return path and final cycle:
+
+  ```text
+  [INTERCMD] WRITE 9874682 1 0 0 0 4096 0
+  [INTERCMD] RESULT 10 reads 1 writes 0 bytes_read 4096 bytes_written 0 completed 1
+  [INTERCMD] CYCLE 9874938
+  ```
+
+### Current Status
+
+- The SimpleSSD smoke harness now uses real PopNet phase-2 delay generation.
+- The round-based LegoSim loop is functioning:
+  - round 1 records traffic;
+  - PopNet writes `delayInfo.txt`;
+  - round 2 consumes those delay records;
+  - LegoSim detects convergence and exits.
+
 ## 2026-07-02 20:53 CST
 
 ### Active LegoSim Handshake

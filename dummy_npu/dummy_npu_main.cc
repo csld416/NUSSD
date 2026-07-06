@@ -121,6 +121,10 @@ void emitResult(const std::vector<std::string> &items) {
   std::cout << std::endl;
 }
 
+void emitCycle(uint64_t cycle) {
+  std::cout << kInterCmdHead << " CYCLE " << cycle << std::endl;
+}
+
 bool parseSyncLine(const std::string &line, uint64_t &cycle) {
   std::string message = line;
 
@@ -194,6 +198,7 @@ int main(int argc, char *argv[]) {
 
   emitResult({"requests", std::to_string(options.iterations), "last_cycle",
               std::to_string(currentCycle)});
+  emitCycle(currentCycle);
 
   return 0;
 }

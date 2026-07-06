@@ -133,9 +133,6 @@ set(SRC_SIM_LEGOSIM
   sim/global_config.cc
   sim/legosim_main.cc
 )
-set(SRC_SIM_DUMMY_NPU
-  sim/dummy_npu_main.cc
-)
 set(SRC_UTIL
   util/convert.cc
   util/print.cc
@@ -151,7 +148,6 @@ SOURCE_GROUP("Source Files\\sil\\none" FILES ${SRC_SIL_NONE})
 SOURCE_GROUP("Source Files\\sil\\nvme" FILES ${SRC_SIL_NVME})
 SOURCE_GROUP("Source Files\\sim" FILES ${SRC_SIM})
 SOURCE_GROUP("Source Files\\sim" FILES ${SRC_SIM_LEGOSIM})
-SOURCE_GROUP("Source Files\\sim" FILES ${SRC_SIM_DUMMY_NPU})
 SOURCE_GROUP("Source Files\\util" FILES ${SRC_UTIL})
 
 # Define executable
@@ -177,7 +173,3 @@ add_executable(simplessd-legosim
   ${SRC_UTIL}
 )
 target_link_libraries(simplessd-legosim simplessd)
-
-add_executable(simplessd-dummy-npu
-  ${SRC_SIM_DUMMY_NPU}
-)
