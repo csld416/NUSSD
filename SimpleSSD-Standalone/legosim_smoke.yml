@@ -1,0 +1,34 @@
+# Minimal LegoSim harness for the SimpleSSD active simlet.
+#
+# Run from SimpleSSD-Standalone with:
+#   SIMULATOR_ROOT=/Users/csld/ECLAB/SIM/LEGOSIM_MICRO \
+#     ../LEGOSIM_MICRO/interchiplet/bin/interchiplet ./legosim_smoke.yml --cwd .
+
+phase1:
+  - cmd: "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/build/simplessd-dummy-npu"
+    args: ["0", "0", "1", "0", "4096", "1", "1"]
+    log: "dummy_npu.log"
+    is_to_stdout: false
+    clock_rate: 1
+
+  - cmd: "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/build/simplessd-legosim"
+    args:
+      - "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/config/sample.cfg"
+      - "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/simplessd/config/sample.cfg"
+      - "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/build"
+      - "1"
+      - "0"
+      - "0"
+      - "0"
+      - "4096"
+      - "1"
+    log: "simplessd.log"
+    is_to_stdout: false
+    clock_rate: 1
+
+phase2:
+  - cmd: "/usr/bin/true"
+    args: []
+    log: "phase2_true.log"
+    is_to_stdout: false
+    clock_rate: 1
