@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cinttypes>
 #include <cstdlib>
+#include <algorithm>
 #include <functional>
 #include <iostream>
 #include <sstream>
@@ -24,6 +25,26 @@ namespace {
 
 const char kInterCmdHead[] = "[INTERCMD]";
 
+// --- Read-path command/data leg split -----------------------------------
+// See PyTorchSim/TOGSim/src/DramLegoSim.cc for the full rationale (search
+// for kEnableReadCommandShrink there). Summary: for read requests, the
+// request-arrival leg (this side's READ, paired against the NPU's WRITE)
+// should declare a small fixed-size command instead of the full transfer
+// size; the completion leg (this side's WRITE, carrying the real data)
+// stays at the real request size.
+//
+// IMPORTANT: kReadCmdBytes here MUST be numerically identical to the
+// constant of the same name in DramLegoSim.cc. LegoSim's coordinator
+// (interchiplet/includes/cmd_handler.h: hasMatchWrite/hasMatchRead)
+// requires the WRITE and READ legs of a pair to declare the exact same
+// nbytes, or the two simlets hang waiting for a SYNC that never arrives.
+//
+// Set kEnableReadCommandShrink = false (matching the NPU side) to restore
+// the original single-size-both-legs baseline without touching anything
+// else.
+constexpr bool kEnableReadCommandShrink = true;
+constexpr uint64_t kReadCmdBytes = 64;  // e.g. an NVMe read command (LBA + length)
+
 enum StorageOp {
   OP_READ,
   OP_WRITE,
@@ -31,9 +52,36 @@ enum StorageOp {
 
 struct SyncResponse {
   bool ok;
+  bool hasDesc;
   uint64_t cycle;
+  long desc;
 
-  SyncResponse() : ok(false), cycle(0) {}
+  SyncResponse() : ok(false), hasDesc(false), cycle(0), desc(0) {}
+};
+
+struct PendingIO {
+  long desc;
+  uint64_t offset;
+  uint64_t bytes;
+  uint64_t arrivalCycle;
+  uint64_t submittedTick;
+  uint64_t completionTick;
+  uint64_t completionCycle;
+  bool done;
+  bool returned;
+  SimpleSSD::Event submitEvent;
+
+  PendingIO()
+      : desc(0),
+        offset(0),
+        bytes(0),
+        arrivalCycle(0),
+        submittedTick(0),
+        completionTick(0),
+        completionCycle(0),
+        done(false),
+        returned(false),
+        submitEvent(0) {}
 };
 
 struct Options {
@@ -165,16 +213,18 @@ bool parseOptions(int argc, char *argv[], Options &options) {
   return options.requestBytes > 0 && options.iterations > 0;
 }
 
-void emitRead(uint64_t cycle, const Options &options, uint64_t bytes) {
+void emitRead(uint64_t cycle, const Options &options, uint64_t bytes,
+              long desc) {
   std::cout << std::endl << kInterCmdHead << " READ " << cycle << " " << options.npuX
             << " " << options.npuY << " " << options.ssdX << " "
-            << options.ssdY << " " << bytes << " 0" << std::endl;
+            << options.ssdY << " " << bytes << " " << desc << std::endl;
 }
 
-void emitWrite(uint64_t cycle, const Options &options, uint64_t bytes) {
+void emitWrite(uint64_t cycle, const Options &options, uint64_t bytes,
+               long desc) {
   std::cout << std::endl << kInterCmdHead << " WRITE " << cycle << " " << options.ssdX
             << " " << options.ssdY << " " << options.npuX << " "
-            << options.npuY << " " << bytes << " 0" << std::endl;
+            << options.npuY << " " << bytes << " " << desc << std::endl;
 }
 
 void emitResult(const std::vector<std::string> &items) {
@@ -214,6 +264,9 @@ bool parseSyncLine(const std::string &line, SyncResponse &response) {
 
   response.ok = true;
   response.cycle = cycle;
+  if (ss >> response.desc) {
+    response.hasDesc = true;
+  }
 
   return true;
 }
@@ -276,7 +329,6 @@ int main(int argc, char *argv[]) {
   uint32_t minBlockSize = 0;
   driver.getInfo(capacity, minBlockSize);
 
-  uint64_t nextOffset = options.startOffset;
   uint64_t nextID = 1;
   uint64_t submittedReads = 0;
   uint64_t submittedWrites = 0;
@@ -284,17 +336,20 @@ int main(int argc, char *argv[]) {
   uint64_t bytesWritten = 0;
   uint64_t currentCycle = 1;
 
-  auto runStorageIO = [&](uint64_t arrivalCycle, uint64_t bytes) -> uint64_t {
+  auto runStorageIOBlocking = [&](uint64_t arrivalCycle, uint64_t offset,
+                                  uint64_t bytes, StorageOp op) -> uint64_t {
     bool done = false;
+    uint64_t submittedTick = 0;
     uint64_t completionTick = 0;
     SimpleSSD::Event submitEvent = 0;
 
     submitEvent = engine.allocateEvent([&](uint64_t) {
       BIL::BIO bio;
 
+      submittedTick = engine.getCurrentTick();
       bio.id = nextID++;
-      bio.type = options.op == OP_READ ? BIL::BIO_READ : BIL::BIO_WRITE;
-      bio.offset = nextOffset;
+      bio.type = op == OP_READ ? BIL::BIO_READ : BIL::BIO_WRITE;
+      bio.offset = offset;
       bio.length = bytes;
       bio.callback = [&](uint64_t) {
         completionTick = engine.getCurrentTick();
@@ -303,18 +358,13 @@ int main(int argc, char *argv[]) {
 
       bioEntry.submitIO(bio);
 
-      if (options.op == OP_READ) {
+      if (op == OP_READ) {
         submittedReads++;
         bytesRead += bytes;
       }
       else {
         submittedWrites++;
         bytesWritten += bytes;
-      }
-
-      nextOffset += bytes;
-      if (capacity > 0 && nextOffset >= capacity) {
-        nextOffset %= capacity;
       }
     });
 
@@ -326,36 +376,151 @@ int main(int argc, char *argv[]) {
 
     engine.deallocateEvent(submitEvent);
 
-    return static_cast<uint64_t>(completionTick / options.clockRate);
+    return static_cast<uint64_t>((completionTick - submittedTick) /
+                                 options.clockRate);
+  };
+
+  auto submitStorageIOAsync = [&](PendingIO &pending, StorageOp op) {
+    PendingIO *pendingPtr = &pending;
+    pending.submitEvent = engine.allocateEvent([&, op, pendingPtr](uint64_t) {
+      BIL::BIO bio;
+
+      pendingPtr->submittedTick = engine.getCurrentTick();
+      bio.id = nextID++;
+      bio.type = op == OP_READ ? BIL::BIO_READ : BIL::BIO_WRITE;
+      bio.offset = pendingPtr->offset;
+      bio.length = pendingPtr->bytes;
+      bio.callback = [pendingPtr, &engine, &options](uint64_t) {
+        pendingPtr->completionTick = engine.getCurrentTick();
+        uint64_t latency =
+            static_cast<uint64_t>((pendingPtr->completionTick -
+                                   pendingPtr->submittedTick) /
+                                  options.clockRate);
+        pendingPtr->completionCycle = pendingPtr->arrivalCycle + latency;
+        pendingPtr->done = true;
+      };
+
+      bioEntry.submitIO(bio);
+
+      if (op == OP_READ) {
+        submittedReads++;
+        bytesRead += pendingPtr->bytes;
+      }
+      else {
+        submittedWrites++;
+        bytesWritten += pendingPtr->bytes;
+      }
+    });
+
+    engine.scheduleEvent(
+        pending.submitEvent,
+        static_cast<uint64_t>(pending.arrivalCycle * options.clockRate));
   };
 
   emitResult({"capacity", std::to_string(capacity), "min_io_size",
               std::to_string(minBlockSize)});
 
+  std::vector<PendingIO> pending(options.iterations);
+  uint64_t nextOffset = options.startOffset;
+
   for (uint64_t i = 0; i < options.iterations; i++) {
+    pending[i].desc = static_cast<long>((i + 1) * 8);
+    pending[i].offset = nextOffset;
+    pending[i].bytes = options.requestBytes;
+
+    if (options.op == OP_READ) {
+      runStorageIOBlocking(0, pending[i].offset, pending[i].bytes, OP_WRITE);
+    }
+
+    nextOffset += options.requestBytes;
+    if (capacity > 0 && nextOffset >= capacity) {
+      nextOffset %= capacity;
+    }
+  }
+
+  // Wire size of the request-arrival leg. For reads, this pairs against
+  // DramLegoSim's WRITE(command_bytes) leg and must match it exactly (see
+  // kReadCmdBytes comment above); the SSD's own internal service size
+  // (pending[i].bytes, set above) is unaffected and stays the real
+  // options.requestBytes regardless of this leg's declared wire size.
+  const uint64_t requestLegBytes =
+      (kEnableReadCommandShrink && options.op == OP_READ)
+          ? kReadCmdBytes
+          : options.requestBytes;
+  for (uint64_t i = 0; i < options.iterations; i++) {
+    emitRead(currentCycle + i, options, requestLegBytes, pending[i].desc);
+  }
+
+  uint64_t arrivals = 0;
+  while (arrivals < options.iterations) {
     SyncResponse arrival;
-    SyncResponse returned;
-
-    emitRead(currentCycle, options, options.requestBytes);
-
     if (!waitForSync(arrival)) {
       std::cerr << "Failed to receive request-arrival SYNC." << std::endl;
       releaseSimpleSSDEngine();
       return 4;
     }
 
-    uint64_t flashDoneCycle =
-        runStorageIO(arrival.cycle, options.requestBytes);
+    uint64_t index = arrivals;
+    if (arrival.hasDesc) {
+      if (arrival.desc <= 0 || arrival.desc % 8 != 0 ||
+          static_cast<uint64_t>(arrival.desc / 8) == 0 ||
+          static_cast<uint64_t>(arrival.desc / 8) > pending.size()) {
+        std::cerr << "Received request-arrival SYNC with invalid desc "
+                  << arrival.desc << "." << std::endl;
+        releaseSimpleSSDEngine();
+        return 4;
+      }
+      index = static_cast<uint64_t>(arrival.desc / 8 - 1);
+    }
 
-    emitWrite(flashDoneCycle, options, options.requestBytes);
+    pending[index].arrivalCycle = arrival.cycle;
+    submitStorageIOAsync(pending[index], options.op);
+    arrivals++;
+  }
 
+  uint64_t completed = 0;
+  while (completed < options.iterations && engine.doNextEvent()) {
+    for (auto &item : pending) {
+      if (item.done && item.submitEvent != 0) {
+        engine.deallocateEvent(item.submitEvent);
+        item.submitEvent = 0;
+        emitWrite(item.completionCycle, options, item.bytes, item.desc);
+        completed++;
+      }
+    }
+  }
+
+  if (completed != options.iterations) {
+    std::cerr << "Failed to complete all storage requests." << std::endl;
+    releaseSimpleSSDEngine();
+    return 5;
+  }
+
+  uint64_t returnedCount = 0;
+  while (returnedCount < options.iterations) {
+    SyncResponse returned;
     if (!waitForSync(returned)) {
       std::cerr << "Failed to receive return-path SYNC." << std::endl;
       releaseSimpleSSDEngine();
-      return 5;
+      return 6;
     }
 
-    currentCycle = returned.cycle;
+    uint64_t index = returnedCount;
+    if (returned.hasDesc) {
+      if (returned.desc <= 0 || returned.desc % 8 != 0 ||
+          static_cast<uint64_t>(returned.desc / 8) == 0 ||
+          static_cast<uint64_t>(returned.desc / 8) > pending.size()) {
+        std::cerr << "Received return-path SYNC with invalid desc "
+                  << returned.desc << "." << std::endl;
+        releaseSimpleSSDEngine();
+        return 6;
+      }
+      index = static_cast<uint64_t>(returned.desc / 8 - 1);
+    }
+
+    pending[index].returned = true;
+    currentCycle = std::max(currentCycle, returned.cycle);
+    returnedCount++;
   }
 
   emitResult({"reads", std::to_string(submittedReads), "writes",
