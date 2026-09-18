@@ -1,0 +1,14 @@
+start 2026-08-27 17:17:04 cases=6 sequential=true
+run 1/6 cold_pcie_4096_qd1 started_at=2026-08-27 17:17:04
+done cold_pcie_4096_qd1: cycles=49897986 link_occupied=1024000.000000 p_wall=0.0205218703617 link_sum/request=0.0205218703617 done_at=2026-08-27 17:17:11
+run 2/6 cold_pcie_16384_qd1 started_at=2026-08-27 17:17:11
+done cold_pcie_16384_qd1: cycles=54813986 link_occupied=3840000.000000 p_wall=0.0700551133063 link_sum/request=0.0700551133063 done_at=2026-08-27 17:17:19
+run 3/6 cold_pcie_65536_qd1 started_at=2026-08-27 17:17:19
+done cold_pcie_65536_qd1: cycles=75177986 link_occupied=15104000.000000 p_wall=0.200909878059 link_sum/request=0.200909878059 done_at=2026-08-27 17:17:26
+run 4/6 cold_pcie_262144_qd1 started_at=2026-08-27 17:17:26
+done cold_pcie_262144_qd1: cycles=158033986 link_occupied=60160000.000000 p_wall=0.380677609435 link_sum/request=0.380677609435 done_at=2026-08-27 17:17:37
+run 5/6 cold_pcie_1048576_qd1 started_at=2026-08-27 17:17:37
+done cold_pcie_1048576_qd1: cycles=489457986 link_occupied=240384000.000000 p_wall=0.491122847876 link_sum/request=0.491122847876 done_at=2026-08-27 17:18:37
+run 6/6 cold_pcie_4194304_qd1 started_at=2026-08-27 17:18:37
+done cold_pcie_4194304_qd1: cycles=1815153986 link_occupied=961280000.000000 p_wall=0.529585923516 link_sum/request=0.529585923516 done_at=2026-08-27 17:30:12
+finish 2026-08-27 17:30:12 failures=0

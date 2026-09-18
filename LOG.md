@@ -1,4 +1,225 @@
-# Project Log
+# Project Log (Rule: the more recent, the more on file top)
+## 2026-09-18
+Updated README for more comprehensive goal structure.
+
+## 2026-09-08: Baseline Correction from PCIe to UFS 4.0
+
+The previous baseline was mislabeled as PCIe. The intended baseline is UFS 4.0.
+
+Important implementation consequence:
+
+```text
+The active LegoSim integration does not use SimpleSSD's native NVMe PCIe timing
+path for the host-to-SSD link. SimpleSSD is run with Interface = 0, and the
+external NPU/SSD link is modeled by LegoSim + PopNet.
+```
+
+Therefore the correction should be made in the LegoSim/PopNet configs, not by
+switching `SimpleSSD-Standalone/config/sample.cfg` to `Interface = 3`.
+
+Added UFS4 baseline files:
+
+```text
+config/legosim_ufs4.yml
+config/legosim_ufs4_hot.yml
+SimpleSSD-Standalone/topology/line_2_ufs4.gv
+```
+
+UFS4 raw interface target:
+
+```text
+23.2 Gb/s per lane * 2 lanes = 46.4 Gb/s = 5.8 GB/s
+```
+
+PopNet representation:
+
+```text
+-F 1 => 8 bytes / PopNet cycle
+clock_rate = 0.000725
+```
+
+Because interchiplet converts SimpleSSD/interchiplet ps ticks to PopNet cycles
+by multiplying by `clock_rate`, this means:
+
+```text
+1 PopNet cycle = 1 / 0.000725 ps = 1379.31 ps = 1.37931 ns
+8 bytes / 1.37931 ns ~= 5.8 GB/s
+```
+
+The UFS4 topology uses:
+
+```text
+edge[weight=5.075]
+```
+
+This corresponds to about `7 ns` in the UFS4 PopNet clock domain:
+
+```text
+5.075 cycles * 1.37931 ns/cycle ~= 7.0 ns
+```
+
+This is currently a raw-link UFS4 approximation. It does not fully model
+UniPro packet headers, UFS command protocol, link startup, power-state
+transitions, or software-stack latency.
+
+Updated `results/run_pcie_p_characterization.py` so it can run either:
+
+```text
+--variant ufs4
+--variant pcie
+```
+
+Default output paths now target UFS4:
+
+```text
+ufs4_p_characterization_8ch_onfi52/
+results/ufs4_p_characterization_8ch_onfi52.csv
+results/ufs4_p_characterization_8ch_onfi52.out
+```
+
+Smoke test:
+
+```text
+python3 -u results/run_pcie_p_characterization.py \
+  --variant ufs4 \
+  --modes cold \
+  --sizes 4KB \
+  --qds 1 \
+  --run-root /tmp/ufs4_smoke \
+  --csv /tmp/ufs4_smoke.csv \
+  --log /tmp/ufs4_smoke.out \
+  --force
+```
+
+Result:
+
+```text
+cold_ufs4_4096_qd1
+final_cycle = 49,260,192 ps
+link_occupied = 280,000 ps
+p_wall = 0.0056841028959
+PopNet finished = 2 / 2
+```
+
+The two link transactions were:
+
+```text
+64B read command
+4KB read response
+```
+
+## 2026-08-27 - Analytical Model Correction: FTL CPU Cost Does Not Scale With N_LPN(S)
+
+### What Was Investigated
+
+Traced `CPU::applyLatency()` (`simplessd/cpu/cpu.cc:733-793`) to determine
+whether the FTL CPU-model cost is serialized across the multiple LPN
+subrequests that make up one large read (i.e. whether the earlier
+`T_FTL,CPU(S) = ceil(S/32KB) * 1.285us` formula is correct), by checking for
+shared CPU scheduling state (busy-until timestamp, core pool queue, finite
+parallelism).
+
+### Finding 1: `applyLatency()` Is Completely Stateless
+
+```text
+uint64_t CPU::applyLatency(NAMESPACE ns, FUNCTION fct) {
+  ...
+  pCore->addStat(inst->second);   // pure statistics bookkeeping only
+  return inst->second.latency;    // fixed CPI-table value, always
+}
+```
+
+The return value is a static lookup from the `InstStat` CPI table -- it does
+not depend on `tick`, on how many prior calls happened, or on any core-busy
+state. `pCore->addStat()` (`cpu.cc:133-136`) only increments a cumulative
+statistics counter used for the printed stats dump; it has zero effect on
+control flow or timing. `leastBusyCPU()` (`cpu.cc:641-669`) only decides
+which core's *statistics* counter gets incremented -- not which core
+processes the "job" in any timing sense.
+
+The class does contain real busy-until/queueing machinery
+(`Core::submitJob`/`handleJob`/`jobDone`, `cpu.cc:90-131`, using a `busy`
+flag and a `jobs` queue) that *would* implement genuine serialization -- but
+`applyLatency()` never calls `submitJob()`. That machinery is dead code with
+respect to every call site actually exercised by this project's read path
+(`FTL::read`, `PageMapping::read`/`readInternal`, `ICL::read`,
+`GenericCache::read`). `FTLCoreCount` in the active config has no effect on
+the returned latency through this path.
+
+### Finding 2: `ICL::read()`'s Per-LPN Loop Uses MAX, Not SUM -- This Is the Real Correction
+
+```text
+simplessd/icl/icl.cc:66-95, ICL::read()
+
+for (uint64_t i = 0; i < req.range.nlp; i++) {
+  beginAt = tick;                        // reset to the SAME starting tick every iteration
+  ...
+  pCache->read(reqInternal, beginAt);    // this LPN's whole chain (FTL CPU + mapping DRAM + PAL) runs from beginAt
+  finishedAt = MAX(finishedAt, beginAt); // MAX across iterations, not accumulation
+}
+tick = finishedAt;
+```
+
+`beginAt` is reset to the *original* `tick` at the top of every loop
+iteration, not carried forward from the previous iteration's result. All
+`N = req.range.nlp` per-LPN chains are modeled as starting from the same
+tick and running independently; the loop keeps only the maximum finishing
+time across all N, not a sum.
+
+### Correction to the Analytical Model
+
+Since every per-LPN FTL CPU cost is identical (same `InstStat` lookup
+regardless of which LPN is being processed), and `applyLatency()` has no
+cross-call state (Finding 1), and the calling loop takes MAX not SUM
+(Finding 2):
+
+```text
+T_FTL,CPU(S) = T_FTL,CPU,one          (constant, independent of S)
+```
+
+This replaces the earlier (incorrect) formula from this session's analytical
+model derivation:
+
+```text
+T_FTL,CPU(S) = ceil(S/32KB) x 1.285us          <- WRONG, derived assuming
+                                                    sequential/summed per-LPN
+                                                    calls; ICL::read()'s loop
+                                                    structure does not do that
+```
+
+This is a code-derived correction (not measured), confirmed independently at
+two separate points: (1) the CPU-model layer has no mechanism to serialize
+across calls, and (2) the calling loop explicitly does not accumulate `tick`
+across iterations.
+
+### Open Question Flagged, Not Yet Resolved
+
+The "overlap -> max, not sum" behavior confirmed here is specific to the
+ICL-level bookkeeping and the CPU-model layer, both shown to be stateless/
+parallel-friendly. It does NOT automatically mean every per-LPN cost
+overlaps for free:
+
+- `pDRAM->read()`'s mapping-table lookup uses `SimpleDRAM::updateDelay()`,
+  which tracks a shared `lastDRAMAccess` timestamp (`dram/simple.cc:53-74`)
+  -- this IS stateful and order-dependent. Whether concurrent (same-tick)
+  LPN subrequests contend on this shared DRAM state, and therefore whether
+  `T_mapping_DRAM(S)` should also be corrected away from its
+  `ceil(S/32KB) x 0.7us` form, has not been checked.
+- The PAL layer's `FindFreeTime`/`InsertFreeSlot` channel/die scheduling
+  (`pal/old/PAL2.cc`) is also stateful, but per-channel
+  (`ChFreeSlots[channel]`) and per-die (`DieFreeSlots[die]`) -- different
+  LPNs of one large request likely land on different channels (per
+  `PageAllocation=CWDP` cycling channel first), which would mean their PAL
+  costs genuinely overlap too, but this depends on channel count (8 in the
+  active config) providing enough parallelism. Once `N_LPN(S)` exceeds the
+  channel count, later LPNs would need to queue for a channel already in
+  use -- a real finite-parallelism bound (P = channel count), distinct from
+  and unrelated to the CPU-model layer covered in this entry. Not derived
+  here.
+
+Both of these need their own trace before `T_mapping_DRAM(S)` and `T_PAL(S)`
+can be trusted at their previously-derived forms for `N_LPN(S) > 1`
+(i.e. `S > 32KB`).
 
 ## 2026-08-27 - Read Path: Split Request-Leg Command Size From Response-Leg Data Size
 
@@ -120,6 +341,1258 @@ globally linear as the earlier fit implied -- the linear law only holds for
 `e` well above the buffer depth. Not investigated further here; flagged for
 follow-up if the command-leg latency itself becomes analytically important
 (e.g. once IFP work needs a precise small-command-latency term).
+
+## 2026-08-21: Reverted Channel Count and Switched NAND DMA Speed to ONFI-5.2-Class
+
+Stopped the in-progress 42-channel PCIe-only characterization run.
+
+Reason:
+
+- The 42-channel configuration was useful as a hypothesis test for making the
+  NAND interface faster than PCIe, but it is not a practical SSD design point.
+- Based on the paper context shared by senior 榕駿, specifically the HPCA
+  InstAttention discussion, a normal SSD channel count should be closer to the
+  `8-16` range.
+- Therefore, using `42` channels risks proving PCIe sensitivity only under an
+  unrealistic SSD organization.
+
+New decision:
+
+- Switch the active characterization back to `8` channels.
+- Increase NAND DMA speed instead of channel count.
+- Keep `DMAWidth = 8`.
+- Use `DMASpeed = 3600` to approximate an ONFI 5.2 / NV-DDR3-class interface.
+
+Active SimpleSSD configs:
+
+```text
+SimpleSSD-Standalone/simplessd/config/sample.cfg
+SimpleSSD-Standalone/simplessd/config/sample_nocache.cfg
+```
+
+Active PAL parameters:
+
+```text
+Channel  = 8
+DMASpeed = 3600
+DMAWidth = 8
+```
+
+Approximate aggregate NAND DMA bandwidth:
+
+```text
+per-channel ~= 3600 MT/s * 1 byte = 3.6 GB/s
+aggregate   ~= 8 * 3.6 GB/s = 28.8 GB/s
+```
+
+This exceeds the PCIe-equivalent link target of about `15.8 GB/s`, while using
+a practical channel count.
+
+Caveat:
+
+- SimpleSSD does not explicitly toggle an ONFI generation such as `ONFI 5.2`.
+- The simulator only uses `DMASpeed` and `DMAWidth` to calculate NAND DMA bus
+  timing.
+- Array read/program/erase latencies such as `LSBRead`, `MSBRead`, `LSBWrite`,
+  and `MSBWrite` remain unchanged.
+- Therefore the correct report wording is: "we approximate ONFI 5.2 /
+  NV-DDR3-class NAND interface speed by setting `DMASpeed = 3600 MT/s`."
+
+Added hot 8-channel PCIe LegoSim config:
+
+```text
+config/legosim_pcie_hot.yml
+```
+
+Retargeted the PCIe-only characterization harness to the 8-channel ONFI-5.2
+setup:
+
+```text
+results/run_pcie_p_characterization.py
+```
+
+New outputs:
+
+```text
+results/pcie_p_characterization_8ch_onfi52.csv
+results/pcie_p_characterization_8ch_onfi52.out
+results/pcie_p_characterization_8ch_onfi52.console.out
+pcie_p_characterization_8ch_onfi52/
+```
+
+The sweep remains:
+
+```text
+request size = 4KB, 16KB, 64KB, 256KB, 1MB, 4MB
+QD           = 1, 2, 4, 8, 16, 32
+cases        = cold PCIe, hot PCIe
+total cases  = 72
+execution    = sequential, no --jobs
+```
+
+### Correction: QD Link Fraction Must Use Wall-Clock Occupancy
+
+The first ONFI-5.2 run used:
+
+```text
+p = sum(delayInfo packet delays) / final_cycle
+```
+
+This is valid only as a per-packet delay sum diagnostic. It is not a
+wall-clock fraction under QD > 1 because multiple PCIe packets can overlap in
+time. Therefore the sum of packet residence times can exceed the workload
+makespan, producing impossible values such as `p > 1`.
+
+Stopped and archived that invalid partial run under:
+
+```text
+results/tmp/invalid_link_sum_as_p_20260821/
+```
+
+Updated `results/run_pcie_p_characterization.py` to report:
+
+```text
+t_link_sum_cycle          = sum of all delayInfo packet delays
+t_link_occupied_cycle     = union of [packet_start, packet_end] intervals
+p_link_occupied_fraction  = t_link_occupied_cycle / T_request
+link_sum_over_request     = t_link_sum_cycle / T_request
+```
+
+The correct `p` for workload-level PCIe occupation is now:
+
+```text
+p = p_link_occupied_fraction
+```
+
+`link_sum_over_request` may still exceed `1` and should be interpreted only as
+an overlap-sensitive packet-delay accumulation metric, not as a time fraction.
+
+### Correction: QD32 Hangs Current SimpleSSD Configuration
+
+The corrected ONFI-5.2 run reached:
+
+```text
+cold_pcie_4096_qd32
+```
+
+and then stalled in round-1 phase-1 before PopNet. This was not normal PopNet
+runtime. The process tree showed `interchiplet`, `simplessd-legosim`, and the
+driver all idle, with no `bench.txt` or `delayInfo.txt` produced.
+
+Relevant active SimpleSSD queue limits:
+
+```text
+MaxRequestCount = 8
+MaxIOCQueue     = 16
+MaxIOSQueue     = 16
+```
+
+QD16 completed; QD32 deadlocked. Therefore, for the current platform
+characterization, QD32 is outside the reliable operating range unless these
+queue limits and the LegoSim/SimpleSSD request protocol are changed together.
+
+Stopped the hung QD32 run and changed the default PCIe-only sweep QD list to:
+
+```text
+QD = 1, 2, 4, 8, 16
+```
+
+The ONFI-5.2 8-channel characterization is now a 60-case sweep:
+
+```text
+6 request sizes * 5 QD values * 2 memory modes = 60 cases
+```
+
+### Fix: Hot QD8 Phase-1 Protocol Stall
+
+The ONFI-5.2 8-channel PCIe-only sweep later stalled at:
+
+```text
+hot_pcie_4096_qd8
+```
+
+This was not PopNet runtime. The run never reached phase 2 and produced no
+`bench.txt` or `delayInfo.txt`. SimpleSSD had emitted all eight return-path
+`[INTERCMD] WRITE` messages, but the two simlets did not finish the round.
+
+Root cause:
+
+```text
+LEGOSIM_MICRO/interchiplet/srcs/interchiplet.cpp
+```
+
+only parsed protocol commands when a captured output line started exactly with
+`[INTERCMD]`. In hot-cache runs, SimpleSSD simulator logging can interleave with
+protocol stdout, causing valid `[INTERCMD]` messages to appear later in the same
+captured line. Those commands were silently ignored, which could leave one side
+waiting for a SYNC forever.
+
+Fix:
+
+```text
+parse_command now searches each captured line for "[INTERCMD]" and parses the
+command substring even if simulator text appears before it.
+```
+
+Validation:
+
+```text
+hot 4KB QD8  completed in /tmp/sim_hot_qd8_fix  with 16 bench/delay records
+hot 4KB QD16 completed in /tmp/sim_hot_qd16_fix with 32 bench/delay records
+```
+
+The killed QD8 row remains recorded as `STOPPED` in the CSV from the aborted
+run. A resumed harness run will re-run non-OK rows while preserving completed
+OK rows.
+
+### Completed: ONFI-5.2 8-Channel PCIe-Only p Characterization
+
+Resumed the sequential harness after the hot-cache protocol parser fix.
+
+The previously stalled case:
+
+```text
+hot_pcie_4096_qd8
+```
+
+completed successfully after the fix:
+
+```text
+cycles = 19264088
+p_wall = 0.554191820552
+done_at = 2026-08-22 16:00:33 UTC+8
+```
+
+The full 60-case sweep then completed:
+
+```text
+status summary: OK=60 RUNNING=0 PENDING=0 FAIL=0 STOPPED=0 total=60
+final case: hot_pcie_4194304_qd16
+final case cycles = 21728994047
+final case p_wall = 0.727770278403
+final case done_at = 2026-08-23 10:04:00 UTC+8
+```
+
+Validation rule:
+
+```text
+expected_records = 2 * QD
+bench_records    = expected_records
+delay_records    = expected_records
+popnet_tx_count  = expected_records
+popnet_finished  = expected_records
+status           = OK
+```
+
+Validation result:
+
+```text
+rows = 60
+invalid = 0
+```
+
+Generated validation and plots:
+
+```text
+results/plot_pcie_p_characterization.py
+results/pcie_p_characterization_8ch_onfi52_validation.csv
+results/pcie_p_characterization_8ch_onfi52_p_heatmap.png
+results/pcie_p_characterization_8ch_onfi52_p_lines.png
+```
+
+Quick p-wall sanity summary:
+
+```text
+cold min p_wall = 0.029400 at 4KB QD8
+cold max p_wall = 0.869557 at 4MB QD4
+hot  min p_wall = 0.056012 at 64KB QD1
+hot  max p_wall = 0.868426 at 16KB QD8
+```
+
+Next analysis step:
+
+```text
+Use the p_wall heatmap/line plots to identify SSD-dominated and
+link-dominated regions, then plug p_wall into the PCIe->UCIe analytical
+speedup model before running targeted UCIe validation cases.
+```
+
+### HIL Read-Path Instrumentation for Cold QD1 Analytical Model
+
+Instrumented the actual SimpleSSD HIL read path used by the LegoSim cold-read
+configuration:
+
+```text
+SimpleSSD-Standalone/simplessd/hil/hil.cc
+```
+
+The instrumentation logs the HIL READ CPU scheduling boundary and the downstream
+ICL call boundary:
+
+```text
+HIL_SUBMIT
+HIL_BEGIN
+HIL_CPU = HIL_BEGIN - HIL_SUBMIT
+ICL_BEGIN
+ICL_END
+ICL_ELAPSED = ICL_END - ICL_BEGIN
+HIL_BODY_EXCLUSIVE
+HIL_EXCLUSIVE = HIL_CPU + HIL_BODY_EXCLUSIVE
+```
+
+This preserves simulator timing; it only adds log output. The SimpleSSD target
+was rebuilt successfully:
+
+```text
+cmake --build SimpleSSD-Standalone/build --target simplessd-legosim -j$(nproc)
+```
+
+Added a `--modes` option to the PCIe characterization harness so this
+measurement can run cold-only:
+
+```text
+results/run_pcie_p_characterization.py --modes cold --qds 1
+```
+
+Ran the cold PCIe QD1 sweep for:
+
+```text
+4KB, 16KB, 64KB, 256KB, 1MB, 4MB
+```
+
+The first five harness rows completed normally and exactly matched the previous
+PCIe QD1 characterization timing. The 4MB run produced the required SimpleSSD
+HIL log and the converged final cycle in `interchiplet.out`; the wrapper was
+stopped while waiting in the later PopNet convergence phase, so the raw harness
+CSV leaves that row as RUNNING. The summary uses the already validated PCIe QD1
+4MB timing for the denominator.
+
+Extracted summary:
+
+```text
+results/extract_hil_cold_qd1.py
+results/hil_cold_qd1_summary.csv
+```
+
+Result:
+
+```text
+size_bytes  T_HIL(ps)  T_SSD,cold(ps)  T_HIL/T_SSD,cold
+4096        1492500    48873986        0.0305377
+16384       1492500    50973986        0.0292796
+65536       1492500    60073986        0.0248444
+262144      1492500    97873986        0.0152492
+1048576     1492500    249073986       0.0059922
+4194304     1492500    878873986       0.0016982
+```
+
+Conclusion for the first-order cold QD1 analytical model:
+
+```text
+T_HIL = 1,492,500 ps = 1.4925 us
+```
+
+In this current configuration, `T_HIL` is a fixed per-request CPU scheduling
+term for `CPU::HIL, CPU::READ`. It does not scale with request size in the
+measured QD1 cold-read path. The size-dependent work is downstream of HIL,
+primarily inside ICL/FTL/PAL. For large requests, HIL is safely negligible; for
+4KB to 16KB requests it is still only about 3 percent of `T_SSD,cold`.
+
+### NAND Type Switched from MLC to SLC
+
+Changed both active SimpleSSD configs from MLC to SLC:
+
+```text
+SimpleSSD-Standalone/simplessd/config/sample.cfg
+SimpleSSD-Standalone/simplessd/config/sample_nocache.cfg
+```
+
+Config change:
+
+```text
+NANDType = 1  # MLC
+NANDType = 0  # SLC
+```
+
+No rebuild is required because this is a runtime config value. With SLC,
+SimpleSSD's PAL selects `LatencySLC` and uses the existing LSB timing fields:
+
+```text
+LSBRead  = 40000000 ps
+LSBWrite = 500000000 ps
+```
+
+Any results collected before this point used MLC and should not be mixed with
+new SLC results.
+
+### Current QD1 Cold-Read Theoretical Latency Model
+
+Logged the current first-order analytical model after the read-command
+payload fix and the NAND-type switch to SLC.
+
+Current assumptions:
+
+```text
+QD                         = 1
+read type                  = cold read
+NANDType                   = SLC
+logical page size           = 32 KB
+physical NAND page size     = 16 KB
+DMASpeed                   = 3600 MT/s
+DMAWidth                   = 8 bits
+SSD embedded DRAM page size = 4 KB
+SSD DRAM bandwidth          = 6.4 GB/s
+PCIe modeled bandwidth      = 16 GB/s
+read-command payload        = 64 B
+```
+
+Define:
+
+```text
+N(S) = ceil(S / 32768)
+```
+
+Full decomposition:
+
+```text
+T_read(S)
+  = T_PCIe,send(64B)
+  + T_BIL
+  + T_HIL
+  + T_ICL,CPU
+  + T_ICL,DRAM(S)
+  + T_FTL,CPU(S)
+  + T_FTL,DRAM(S)
+  + T_PAL(S)
+  + T_PCIe,receive(S)
+```
+
+Current derived SSD-side terms:
+
+```text
+T_BIL = 0
+
+T_HIL = 1.4925 us
+
+T_ICL,CPU = 0.3525 us
+
+T_ICL,DRAM(S) = 5.6 * N(S) us
+```
+
+`T_ICL,DRAM` is the SimpleSSD embedded-DRAM / I/O-buffer traffic timing
+surrogate in the no-cache ICL read path, not literal modeled data movement:
+
+```text
+8 DRAM pages/LPN * (18 ns + 42 ns + 4096 B / 6.4 GB/s)
+= 8 * 0.7 us
+= 5.6 us/LPN
+```
+
+FTL terms:
+
+```text
+T_FTL,CPU(S) = 1.285 * N(S) us
+```
+
+from:
+
+```text
+(57 + 62 + 395) cycles * 2.5 ns = 1.285 us/LPN
+```
+
+```text
+T_FTL,DRAM(S) = 0.7 * N(S) us
+```
+
+because each LPN performs one 8-byte mapping-table lookup, and SimpleDRAM
+charges one full 4KB DRAM-page access:
+
+```text
+18 ns + 42 ns + 4096 B / 6.4 GB/s = 0.7 us
+```
+
+PAL term under QD1 + SLC:
+
+```text
+T_PAL(S)
+  = N(S) * (
+      T_addr
+    + T_wait
+    + T_DMA0
+    + T_MEM
+    + T_ANTI
+    + T_DMA1
+    )
+```
+
+with:
+
+```text
+T_addr = 0
+T_wait = 0
+T_DMA0 ~= 0.001854 us
+T_MEM = 40 us
+T_ANTI = T_DMA0 ~= 0.001854 us
+T_DMA1 ~= 4.3403 us
+```
+
+Therefore:
+
+```text
+T_PAL(S) ~= 44.344 * N(S) us
+```
+
+Combining SSD-side terms:
+
+```text
+T_SSD,QD1(S)
+  = 1.845 + 51.929 * ceil(S / 32768) us
+```
+
+PCIe hardware model:
+
+```text
+T_PCIe,send(64B)
+  = L_send + 64 / BW_PCIe
+
+T_PCIe,receive(S)
+  = L_receive + S / BW_PCIe
+```
+
+With:
+
+```text
+BW_PCIe = 16 GB/s
+```
+
+the QD1 cold-read model is:
+
+```text
+T_read,QD1(S)
+  = 1.849
+  + 51.929 * ceil(S / 32768)
+  + S / 16000
+  + L_send
+  + L_receive
+  us
+```
+
+where `S` is in bytes and `S / 16000` is in microseconds.
+
+If later justified as a symmetric one-way fixed PCIe latency:
+
+```text
+T_read,QD1(S)
+  = 1.849
+  + 51.929 * ceil(S / 32768)
+  + S / 16000
+  + 2 * L_PCIe
+  us
+```
+
+Important unresolved term:
+
+```text
+L_PCIe is currently unresolved.
+```
+
+Do not assign an arbitrary fixed PCIe latency until it is justified from either
+the actual PopNet small-packet behavior or an explicitly chosen hardware
+assumption. The known measured command-leg delay for the current 64B read
+request is a simulator observation, but it has not yet been cleanly separated
+into fixed latency plus serialization time.
+
+### QD1 PCIe Theoretical Model Reasoning and Asymptotic p Bound
+
+This entry records the reasoning path behind the current QD1 PCIe theoretical
+model. The purpose is to preserve which pieces came from code, which pieces
+were measured empirically, and which gaps remain unresolved.
+
+#### 1. Original Starting Point
+
+The original PCIe transfer model used ideal serialization:
+
+```text
+T_PCIe(S) = S / BW_PCIe
+```
+
+With:
+
+```text
+BW_PCIe = 16 GB/s
+```
+
+a 4MB one-way transfer would be:
+
+```text
+4 MB / 16 GB/s ~= 262 us
+```
+
+But previous PopNet measurements showed that one 4MB one-way PCIe transfer
+took about:
+
+```text
+961 us
+```
+
+This is about:
+
+```text
+961 / 262 ~= 3.67x
+```
+
+larger than ideal serialization. Therefore `S / BW_PCIe` is not adequate for
+the current simulator behavior.
+
+#### 2. Why PopNet Behaves Differently
+
+PopNet does not send an `S`-byte payload as one continuous object. It converts
+the payload into flits.
+
+Under the current PCIe configuration:
+
+```text
+payload per flit = 16 B
+```
+
+Therefore the packet flit count is:
+
+```text
+e(S) = ceil(S / 16) + 1
+```
+
+where the `+1` is the head flit.
+
+The modeling chain is therefore:
+
+```text
+S -> e(S) -> T_PopNet
+```
+
+#### 3. Dense PopNet Sweep
+
+To determine the relationship between `e` and latency, an isolated QD1 /
+one-flow / one-hop PCIe sweep was used with dense sampling at very small packet
+sizes, especially around the router buffer depth.
+
+Measured examples:
+
+```text
+e   T(cycles)
+2   45
+3   47
+4   47
+5   49
+...
+12  56
+13  88
+24  100
+25  132
+36  145
+37  176
+48  190
+49  220
+```
+
+Important observation:
+
+```text
+The latency is not globally linear.
+```
+
+Large jumps occur at:
+
+```text
+e = 13, 25, 37, 49, ...
+```
+
+or every 12 flits.
+
+#### 4. Code-Level Explanation of the 12-Flit Period
+
+The 12-flit periodicity is explained by PopNet's credit-based flow control.
+
+`sw_arbitration()` allows a flit to advance only when both output credit
+counters are positive. These counters are initialized from the configured
+buffer sizes:
+
+```text
+B = 12
+O = 12
+```
+
+Therefore up to 12 flits can be outstanding before credit is exhausted.
+
+When the destination receives a flit, it returns a `CREDIT_` message. Until a
+credit returns, the sender cannot advance another flit once its 12 credits are
+exhausted.
+
+Hence the number of credit-window boundaries crossed by a packet is:
+
+```text
+N_stall(e) = floor((e - 1) / 12)
+```
+
+This expression is derived from the observed and code-verified 12-flit credit
+capacity. It is not an arbitrary regression term.
+
+#### 5. Current PopNet Latency Approximation
+
+The current mechanistic empirical approximation is:
+
+```text
+T(e) ~= 45 + (e - 2) + 32 * floor((e - 1) / 12)
+```
+
+Interpretation:
+
+```text
+45
+  small-packet/startup anchor
+
+(e - 2)
+  baseline growth with additional flits
+
+32 * floor((e - 1) / 12)
+  periodic credit-stall penalty
+```
+
+Coefficient status:
+
+```text
+12-flit period
+  code-derived and physically explained by credit counters
+
+32-cycle stall penalty
+  empirical; dense measurements show approximately this additional penalty per
+  exhausted credit window, but it has not yet been derived from first principles
+
+45-cycle startup anchor
+  empirical; based on the measured small-packet latency at e = 2, with internal
+  routing / VC / switch / wire decomposition still unresolved
+```
+
+Therefore this is a mechanistic empirical approximation, not a fully
+first-principles model.
+
+Substituting:
+
+```text
+e(S) = ceil(S / 16) + 1
+```
+
+gives:
+
+```text
+T_PCIe(S)
+  ~= 44
+   + ceil(S / 16)
+   + 32 * floor(ceil(S / 16) / 12)
+  ns
+```
+
+under:
+
+```text
+QD1 / single-flow / one-hop / no-contention PCIe
+```
+
+The periodic model achieved roughly:
+
+```text
+RMSE ~= 1.8 cycles
+maximum observed error ~= 3 cycles
+```
+
+across the dense sweep.
+
+#### 6. Current SSD-Side QD1 Model
+
+Define:
+
+```text
+N_LPN(S) = ceil(S / 32768)
+```
+
+The current cold-read SSD decomposition is:
+
+```text
+T_SSD(S)
+  = T_HIL
+  + T_ICL,CPU
+  + T_ICL,DRAM(S)
+  + T_FTL,CPU(S)
+  + T_FTL,DRAM(S)
+  + T_PAL(S)
+```
+
+Current derived values:
+
+```text
+T_HIL = 1.4925 us
+
+T_ICL,CPU = 0.3525 us
+
+T_ICL,DRAM(S) = 5.6 * ceil(S / 32768) us
+```
+
+The 5.6 us/LPN term is SimpleSSD's embedded-DRAM / I/O-buffer traffic timing
+surrogate, not literal modeled data movement.
+
+```text
+T_FTL,CPU(S) = 1.285 * ceil(S / 32768) us
+
+T_FTL,DRAM(S) = 0.7 * ceil(S / 32768) us
+```
+
+The `T_FTL,DRAM` term corresponds to the 8-byte mapping-table lookup. SimpleDRAM
+charges one full 4KB DRAM-page access for that lookup.
+
+Under current QD1 + SLC assumptions:
+
+```text
+T_PAL(S) ~= 44.344 * ceil(S / 32768) us
+```
+
+Therefore:
+
+```text
+T_SSD(S)
+  ~= 1.845 + 51.929 * ceil(S / 32768) us
+```
+
+#### 7. Definition of p(S)
+
+The PCIe latency fraction is now defined using the PopNet-aware receive
+latency:
+
+```text
+p(S) = T_PCIe(S) / (T_PCIe(S) + T_SSD(S))
+```
+
+Since the PCIe expression is in ns, convert it to us:
+
+```text
+p(S)
+  = (T_PCIe(S) / 1000)
+    /
+    (
+      T_PCIe(S) / 1000
+      + 1.845
+      + 51.929 * ceil(S / 32768)
+    )
+```
+
+#### 8. Asymptotic Derivation
+
+For large `S`:
+
+```text
+ceil(S / 16) ~ S / 16
+```
+
+and:
+
+```text
+floor(ceil(S / 16) / 12) ~ S / 192
+```
+
+Therefore:
+
+```text
+T_PCIe(S)
+  ~ S / 16 + 32 * S / 192
+  = S / 16 + S / 6
+  = 11S / 48
+  ns
+```
+
+Converting to us:
+
+```text
+T_PCIe(S) ~ 11S / 48000 us
+```
+
+Meanwhile:
+
+```text
+T_SSD(S) ~ (51.929 / 32768) * S us
+```
+
+Therefore:
+
+```text
+lim_{S -> infinity} p(S)
+  =
+  (11 / 48000)
+  /
+  (
+    11 / 48000
+    + 51.929 / 32768
+  )
+```
+
+Numerically:
+
+```text
+11 / 48000 ~= 0.00022917 us/B
+
+51.929 / 32768 ~= 0.0015844 us/B
+```
+
+Hence:
+
+```text
+lim_{S -> infinity} p(S) ~= 0.126 ~= 12.6%
+```
+
+#### 9. Current Conclusion
+
+The previous ideal-bandwidth model produced an asymptotic PCIe fraction of
+only about:
+
+```text
+3.8%
+```
+
+because it assumed:
+
+```text
+T_PCIe(S) = S / 16 GB/s
+```
+
+The PopNet-aware model instead predicts an asymptotic PCIe contribution of
+about:
+
+```text
+12.6%
+```
+
+under the current QD1 assumptions.
+
+The increase comes from PopNet's lower effective steady-state throughput,
+caused by the 12-flit credit window and periodic credit-stall penalties.
+
+Remaining open discrepancy:
+
+```text
+The current PopNet-aware theoretical model still does not recover the previous
+experimental 4MB QD1 cold PCIe result:
+
+measured old p ~= 68.6%
+```
+
+That old result came from:
+
+```text
+results/pcie_p_characterization_8ch_onfi52.csv
+cold, pcie, size = 4194304, qd = 1
+final_cycle              = 2801336986
+t_link_occupied_cycle    = 1922463000
+p_link_occupied_fraction = 0.686266239873
+```
+
+This mismatch remains explicitly open. It should not be explained away until
+the theoretical SSD-side decomposition, the PopNet timing model, and the old
+measured characterization path are reconciled against the same simulator
+configuration and same read-link semantics.
+
+### Current Corrected QD1 Cold PCIe Sweep: SLC + 64B Read Command
+
+Reran the QD1 cold PCIe sweep after the two current semantic changes:
+
+```text
+NANDType = SLC
+read request leg = 64B command
+read response leg = S-byte data
+```
+
+Fresh builds before the run:
+
+```text
+cmake --build SimpleSSD-Standalone/build --target simplessd-legosim -j$(nproc)
+
+c++ -std=c++17 \
+  PyTorchSim/TOGSim/tests/DramLegoSim_driver.cc \
+  PyTorchSim/TOGSim/tests/DramLegoSim_base_stub.cc \
+  PyTorchSim/TOGSim/src/DramLegoSim.cc \
+  -IPyTorchSim/TOGSim/tests/stubs -IPyTorchSim/TOGSim/include \
+  -IPyTorchSim/TOGSim/include/scheduler \
+  -IPyTorchSim/TOGSim/extern/ramulator2/src \
+  -o PyTorchSim/TOGSim/tests/build/dram_legosim_driver
+```
+
+Harness:
+
+```text
+python3 -u results/run_pcie_p_characterization.py \
+  --modes cold \
+  --qds 1 \
+  --sizes 4KB,16KB,64KB,256KB,1MB,4MB \
+  --run-root pcie_qd1_cold_slc_cmd64_20260827 \
+  --csv results/pcie_qd1_cold_slc_cmd64_20260827.csv \
+  --log results/pcie_qd1_cold_slc_cmd64_20260827.out \
+  --force
+```
+
+Extractor:
+
+```text
+results/extract_qd1_cold_slc_cmd64.py
+results/pcie_qd1_cold_slc_cmd64_20260827_per_leg.csv
+```
+
+Measured per-leg results:
+
+```text
+size      req_flits  req_link_us  resp_flits  resp_link_us  SSD_us      total_us     p
+4KB       5          0.049        257         0.975         48.873986   49.897986    0.020522
+16KB      5          0.049        1025        3.791         50.973986   54.813986    0.070055
+64KB      5          0.049        4097        15.055        60.073986   75.177986    0.200910
+256KB     5          0.049        16385       60.111        97.873986   158.033986   0.380678
+1MB       5          0.049        65537       240.335       249.073986  489.457986   0.491123
+4MB       5          0.049        262145      961.231       853.873986  1815.153986  0.529586
+```
+
+Immediate interpretation:
+
+```text
+The corrected 4MB QD1 measured p is 52.96%.
+```
+
+This is lower than the old symmetric-link 4MB QD1 cold result:
+
+```text
+old p = 68.63%
+```
+
+but it is still far above the current theoretical asymptotic bound:
+
+```text
+theoretical p_limit ~= 12.6%
+```
+
+Therefore the request-leg correction explains part of the old p value but not
+the whole discrepancy.
+
+The current main identified modeling error is on the SSD side:
+
+```text
+T_SSD(S) = 1.845 + 51.929 * ceil(S / 32768) us
+```
+
+incorrectly serializes all LPN subrequests. The actual `ICL::read()` loop
+starts each subrequest from the same original `tick` and then takes:
+
+```text
+finishedAt = max(finishedAt, beginAt)
+```
+
+so LPN-level work is overlapped through SimpleSSD's FTL/PAL scheduling rather
+than summed naively. This is why the serialized model predicts a 4MB SSD time
+of about `6648.757 us`, while the corrected measured 4MB SSD time is only:
+
+```text
+853.873986 us
+```
+
+Next analytical task:
+
+```text
+replace the serialized SSD-side model with a wave/overlap-aware model or fit
+T_SSD(S) from measured SimpleSSD service time before using it to predict p(S).
+```
+
+## 2026-08-21: Result Archive, Timescale Fix, and Analytical Model Checkpoint
+
+### Archived Stale Results
+
+Moved old generated results into:
+
+```text
+results/tmp/pre_timescale_fix_20260821/
+```
+
+The archive contains:
+
+- `top_level_results/`: old CSV, PNG, and `.out` files from PCIe/UCIe,
+  hot/cold, size/QD, 1MB-QD, and 4MiB-128MiB sweeps.
+- `run_dirs/`: old generated simulation directories, including
+  `size_qd_runs`, `link_scaling_*`, and `llama70b_layer_workloads_*`.
+
+Runnable analysis/harness scripts remain directly under `results/`.
+
+These archived measurements were collected before the PopNet/SimpleSSD
+timescale correction below, so they should not be used for physical
+conclusions without rerunning.
+
+### Analytical Model Basis
+
+Current request-level read model:
+
+```text
+T_request_read(S) = T_link_req(S) + T_SSD_read(S) + T_link_resp(S)
+```
+
+For PCIe vs UCIe comparison:
+
+```text
+Speedup(S) = (T_SSD_read(S) + T_PCIe_req(S) + T_PCIe_resp(S))
+           / (T_SSD_read(S) + T_UCIe_req(S) + T_UCIe_resp(S))
+```
+
+The useful diagnostic fraction is:
+
+```text
+p = (T_PCIe_req(S) + T_PCIe_resp(S)) / T_request_pcie(S)
+```
+
+If `p` is small, replacing PCIe with UCIe cannot produce a large speedup.
+
+### Link and NAND Bandwidth Reasoning
+
+The current active link swap is modeled through PopNet/interchiplet configs,
+not SimpleSSD's native NVMe PCIe fields.
+
+- PCIe-equivalent target: PCIe 5.0 x4, about `15.8 GB/s` effective.
+- UCIe-equivalent target: about `64 GB/s`.
+- Current SimpleSSD NAND interface baseline:
+
+```text
+Channel = 8
+DMASpeed = 400 MT/s
+DMAWidth = 8 bits
+```
+
+Assuming `DMASpeed * DMAWidth` is per channel:
+
+```text
+BW_NAND_interface ~= 8 * 400 MB/s = 3.2 GB/s
+```
+
+This is below the PCIe-equivalent bandwidth, so the baseline SSD may be unable
+to feed enough data to saturate PCIe.
+
+Added 42-channel configs as a hypothesis test:
+
+```text
+BW_NAND_interface_42ch ~= 42 * 400 MB/s = 16.8 GB/s
+```
+
+This is slightly above PCIe 5.0 x4 effective bandwidth, making PCIe saturation
+more plausible if other SSD-side scheduling and NAND-array terms do not
+dominate.
+
+### Timescale Mismatch and Fix
+
+Found a unit mismatch:
+
+- SimpleSSD simulation ticks are reported in ps.
+- PopNet link timing is modeled as ns-scale cycles.
+- Previous phase-2 configs used `clock_rate: 1`, which effectively treated
+  PopNet ns cycles as SimpleSSD ps ticks and underweighted link latency by
+  about `1000x`.
+
+Fixed phase-2 config files by setting:
+
+```text
+clock_rate: 0.001
+```
+
+This converts:
+
+- benchmark timestamps: SimpleSSD ps -> PopNet ns
+- delayInfo timing: PopNet ns -> SimpleSSD ps
+
+Updated result parsers to multiply raw `delayInfo.txt` PopNet cycles by
+`1000.0` before reporting interconnect time in SimpleSSD cycles/ps.
+
+Smoke test after the fix:
+
+```text
+config/legosim_pcie.yml, 4KB read, final cycle = 85576878
+delayInfo raw PopNet cycles = 976 + 975
+scaled link contribution ~= 1,951,000 ps
+```
+
+### Long Multi-Job Run Killed
+
+The long `link_scaling_4m_128m_no_timeout_20260820` run was stopped.
+
+Actions:
+
+- Terminated the Python harness process group.
+- Terminated surviving `interchiplet`/`popnet` child process groups.
+- Verified no matching
+  `run_link_scaling_extrapolate|link_scaling_4m_128m_no_timeout_20260820|interchiplet|popnet`
+  processes remained.
+
+The old partial outputs from that run are archived under
+`results/tmp/pre_timescale_fix_20260821/`.
+
+## 2026-08-21: PCIe-Only Link-Fraction Characterization Started
+
+Postponed direct PCIe-vs-UCIe comparison and started a PCIe-only
+characterization sweep on the 42-channel SSD configuration.
+
+Goal:
+
+```text
+(S, QD, hot/cold) -> p
+
+p = T_link / T_request
+```
+
+Measured terms:
+
+```text
+T_request = final completion cycle
+T_link    = sum(delayInfo.txt raw PopNet delays) * 1000
+T_SSD     = T_request - T_link
+p         = T_link / T_request
+```
+
+Sweep:
+
+```text
+request size = 4KB, 16KB, 64KB, 256KB, 1MB, 4MB
+QD           = 1, 2, 4, 8, 16, 32
+cases        = cold PCIe, hot PCIe
+SSD config   = 42-channel
+total cases  = 72
+```
+
+Harness:
+
+```text
+results/run_pcie_p_characterization.py
+```
+
+Outputs:
+
+```text
+results/pcie_p_characterization_42ch.csv
+results/pcie_p_characterization_42ch.out
+results/pcie_p_characterization_42ch.console.out
+pcie_p_characterization_42ch/
+```
+
+The harness runs sequentially only. No `--jobs` parallelism is used, so PopNet
+does not contend with other cases from this sweep.
+
+`monitor.sh` now reads the characterization CSV and reports every planned case
+as `PENDING`, `RUNNING`, `OK`, or `FAIL`. Completed cases show `done_at_taipei`
+in UTC+8 (`Asia/Taipei`).
+
+First confirmed completed case:
+
+```text
+cold_pcie_4096_qd1
+T_request = 85576878
+T_link    = 1951000
+p         = 0.022798214256
+done_at   = 2026-08-21 20:14:45 UTC+8
+```
 
 ## 2026-08-20 - Llama 3 70B Layer-Weight QD1 Harness
 
@@ -1385,577 +2858,3 @@ SimpleSSD/McPAT sources required narrow portability fixes:
   with one NPU-side requester and the SimpleSSD simlet, then decide whether a
   thin storage-request driver process is enough or whether LegoSim needs a
   storage-specific command extension.
-
-## 2026-08-21: Result Archive, Timescale Fix, and Analytical Model Checkpoint
-
-### Archived Stale Results
-
-Moved old generated results into:
-
-```text
-results/tmp/pre_timescale_fix_20260821/
-```
-
-The archive contains:
-
-- `top_level_results/`: old CSV, PNG, and `.out` files from PCIe/UCIe,
-  hot/cold, size/QD, 1MB-QD, and 4MiB-128MiB sweeps.
-- `run_dirs/`: old generated simulation directories, including
-  `size_qd_runs`, `link_scaling_*`, and `llama70b_layer_workloads_*`.
-
-Runnable analysis/harness scripts remain directly under `results/`.
-
-These archived measurements were collected before the PopNet/SimpleSSD
-timescale correction below, so they should not be used for physical
-conclusions without rerunning.
-
-### Analytical Model Basis
-
-Current request-level read model:
-
-```text
-T_request_read(S) = T_link_req(S) + T_SSD_read(S) + T_link_resp(S)
-```
-
-For PCIe vs UCIe comparison:
-
-```text
-Speedup(S) = (T_SSD_read(S) + T_PCIe_req(S) + T_PCIe_resp(S))
-           / (T_SSD_read(S) + T_UCIe_req(S) + T_UCIe_resp(S))
-```
-
-The useful diagnostic fraction is:
-
-```text
-p = (T_PCIe_req(S) + T_PCIe_resp(S)) / T_request_pcie(S)
-```
-
-If `p` is small, replacing PCIe with UCIe cannot produce a large speedup.
-
-### Link and NAND Bandwidth Reasoning
-
-The current active link swap is modeled through PopNet/interchiplet configs,
-not SimpleSSD's native NVMe PCIe fields.
-
-- PCIe-equivalent target: PCIe 5.0 x4, about `15.8 GB/s` effective.
-- UCIe-equivalent target: about `64 GB/s`.
-- Current SimpleSSD NAND interface baseline:
-
-```text
-Channel = 8
-DMASpeed = 400 MT/s
-DMAWidth = 8 bits
-```
-
-Assuming `DMASpeed * DMAWidth` is per channel:
-
-```text
-BW_NAND_interface ~= 8 * 400 MB/s = 3.2 GB/s
-```
-
-This is below the PCIe-equivalent bandwidth, so the baseline SSD may be unable
-to feed enough data to saturate PCIe.
-
-Added 42-channel configs as a hypothesis test:
-
-```text
-BW_NAND_interface_42ch ~= 42 * 400 MB/s = 16.8 GB/s
-```
-
-This is slightly above PCIe 5.0 x4 effective bandwidth, making PCIe saturation
-more plausible if other SSD-side scheduling and NAND-array terms do not
-dominate.
-
-### Timescale Mismatch and Fix
-
-Found a unit mismatch:
-
-- SimpleSSD simulation ticks are reported in ps.
-- PopNet link timing is modeled as ns-scale cycles.
-- Previous phase-2 configs used `clock_rate: 1`, which effectively treated
-  PopNet ns cycles as SimpleSSD ps ticks and underweighted link latency by
-  about `1000x`.
-
-Fixed phase-2 config files by setting:
-
-```text
-clock_rate: 0.001
-```
-
-This converts:
-
-- benchmark timestamps: SimpleSSD ps -> PopNet ns
-- delayInfo timing: PopNet ns -> SimpleSSD ps
-
-Updated result parsers to multiply raw `delayInfo.txt` PopNet cycles by
-`1000.0` before reporting interconnect time in SimpleSSD cycles/ps.
-
-Smoke test after the fix:
-
-```text
-config/legosim_pcie.yml, 4KB read, final cycle = 85576878
-delayInfo raw PopNet cycles = 976 + 975
-scaled link contribution ~= 1,951,000 ps
-```
-
-### Long Multi-Job Run Killed
-
-The long `link_scaling_4m_128m_no_timeout_20260820` run was stopped.
-
-Actions:
-
-- Terminated the Python harness process group.
-- Terminated surviving `interchiplet`/`popnet` child process groups.
-- Verified no matching
-  `run_link_scaling_extrapolate|link_scaling_4m_128m_no_timeout_20260820|interchiplet|popnet`
-  processes remained.
-
-The old partial outputs from that run are archived under
-`results/tmp/pre_timescale_fix_20260821/`.
-
-## 2026-08-21: PCIe-Only Link-Fraction Characterization Started
-
-Postponed direct PCIe-vs-UCIe comparison and started a PCIe-only
-characterization sweep on the 42-channel SSD configuration.
-
-Goal:
-
-```text
-(S, QD, hot/cold) -> p
-
-p = T_link / T_request
-```
-
-Measured terms:
-
-```text
-T_request = final completion cycle
-T_link    = sum(delayInfo.txt raw PopNet delays) * 1000
-T_SSD     = T_request - T_link
-p         = T_link / T_request
-```
-
-Sweep:
-
-```text
-request size = 4KB, 16KB, 64KB, 256KB, 1MB, 4MB
-QD           = 1, 2, 4, 8, 16, 32
-cases        = cold PCIe, hot PCIe
-SSD config   = 42-channel
-total cases  = 72
-```
-
-Harness:
-
-```text
-results/run_pcie_p_characterization.py
-```
-
-Outputs:
-
-```text
-results/pcie_p_characterization_42ch.csv
-results/pcie_p_characterization_42ch.out
-results/pcie_p_characterization_42ch.console.out
-pcie_p_characterization_42ch/
-```
-
-The harness runs sequentially only. No `--jobs` parallelism is used, so PopNet
-does not contend with other cases from this sweep.
-
-`monitor.sh` now reads the characterization CSV and reports every planned case
-as `PENDING`, `RUNNING`, `OK`, or `FAIL`. Completed cases show `done_at_taipei`
-in UTC+8 (`Asia/Taipei`).
-
-First confirmed completed case:
-
-```text
-cold_pcie_4096_qd1
-T_request = 85576878
-T_link    = 1951000
-p         = 0.022798214256
-done_at   = 2026-08-21 20:14:45 UTC+8
-```
-
-## 2026-08-21: Reverted Channel Count and Switched NAND DMA Speed to ONFI-5.2-Class
-
-Stopped the in-progress 42-channel PCIe-only characterization run.
-
-Reason:
-
-- The 42-channel configuration was useful as a hypothesis test for making the
-  NAND interface faster than PCIe, but it is not a practical SSD design point.
-- Based on the paper context shared by senior 榕駿, specifically the HPCA
-  InstAttention discussion, a normal SSD channel count should be closer to the
-  `8-16` range.
-- Therefore, using `42` channels risks proving PCIe sensitivity only under an
-  unrealistic SSD organization.
-
-New decision:
-
-- Switch the active characterization back to `8` channels.
-- Increase NAND DMA speed instead of channel count.
-- Keep `DMAWidth = 8`.
-- Use `DMASpeed = 3600` to approximate an ONFI 5.2 / NV-DDR3-class interface.
-
-Active SimpleSSD configs:
-
-```text
-SimpleSSD-Standalone/simplessd/config/sample.cfg
-SimpleSSD-Standalone/simplessd/config/sample_nocache.cfg
-```
-
-Active PAL parameters:
-
-```text
-Channel  = 8
-DMASpeed = 3600
-DMAWidth = 8
-```
-
-Approximate aggregate NAND DMA bandwidth:
-
-```text
-per-channel ~= 3600 MT/s * 1 byte = 3.6 GB/s
-aggregate   ~= 8 * 3.6 GB/s = 28.8 GB/s
-```
-
-This exceeds the PCIe-equivalent link target of about `15.8 GB/s`, while using
-a practical channel count.
-
-Caveat:
-
-- SimpleSSD does not explicitly toggle an ONFI generation such as `ONFI 5.2`.
-- The simulator only uses `DMASpeed` and `DMAWidth` to calculate NAND DMA bus
-  timing.
-- Array read/program/erase latencies such as `LSBRead`, `MSBRead`, `LSBWrite`,
-  and `MSBWrite` remain unchanged.
-- Therefore the correct report wording is: "we approximate ONFI 5.2 /
-  NV-DDR3-class NAND interface speed by setting `DMASpeed = 3600 MT/s`."
-
-Added hot 8-channel PCIe LegoSim config:
-
-```text
-config/legosim_pcie_hot.yml
-```
-
-Retargeted the PCIe-only characterization harness to the 8-channel ONFI-5.2
-setup:
-
-```text
-results/run_pcie_p_characterization.py
-```
-
-New outputs:
-
-```text
-results/pcie_p_characterization_8ch_onfi52.csv
-results/pcie_p_characterization_8ch_onfi52.out
-results/pcie_p_characterization_8ch_onfi52.console.out
-pcie_p_characterization_8ch_onfi52/
-```
-
-The sweep remains:
-
-```text
-request size = 4KB, 16KB, 64KB, 256KB, 1MB, 4MB
-QD           = 1, 2, 4, 8, 16, 32
-cases        = cold PCIe, hot PCIe
-total cases  = 72
-execution    = sequential, no --jobs
-```
-
-### Correction: QD Link Fraction Must Use Wall-Clock Occupancy
-
-The first ONFI-5.2 run used:
-
-```text
-p = sum(delayInfo packet delays) / final_cycle
-```
-
-This is valid only as a per-packet delay sum diagnostic. It is not a
-wall-clock fraction under QD > 1 because multiple PCIe packets can overlap in
-time. Therefore the sum of packet residence times can exceed the workload
-makespan, producing impossible values such as `p > 1`.
-
-Stopped and archived that invalid partial run under:
-
-```text
-results/tmp/invalid_link_sum_as_p_20260821/
-```
-
-Updated `results/run_pcie_p_characterization.py` to report:
-
-```text
-t_link_sum_cycle          = sum of all delayInfo packet delays
-t_link_occupied_cycle     = union of [packet_start, packet_end] intervals
-p_link_occupied_fraction  = t_link_occupied_cycle / T_request
-link_sum_over_request     = t_link_sum_cycle / T_request
-```
-
-The correct `p` for workload-level PCIe occupation is now:
-
-```text
-p = p_link_occupied_fraction
-```
-
-`link_sum_over_request` may still exceed `1` and should be interpreted only as
-an overlap-sensitive packet-delay accumulation metric, not as a time fraction.
-
-### Correction: QD32 Hangs Current SimpleSSD Configuration
-
-The corrected ONFI-5.2 run reached:
-
-```text
-cold_pcie_4096_qd32
-```
-
-and then stalled in round-1 phase-1 before PopNet. This was not normal PopNet
-runtime. The process tree showed `interchiplet`, `simplessd-legosim`, and the
-driver all idle, with no `bench.txt` or `delayInfo.txt` produced.
-
-Relevant active SimpleSSD queue limits:
-
-```text
-MaxRequestCount = 8
-MaxIOCQueue     = 16
-MaxIOSQueue     = 16
-```
-
-QD16 completed; QD32 deadlocked. Therefore, for the current platform
-characterization, QD32 is outside the reliable operating range unless these
-queue limits and the LegoSim/SimpleSSD request protocol are changed together.
-
-Stopped the hung QD32 run and changed the default PCIe-only sweep QD list to:
-
-```text
-QD = 1, 2, 4, 8, 16
-```
-
-The ONFI-5.2 8-channel characterization is now a 60-case sweep:
-
-```text
-6 request sizes * 5 QD values * 2 memory modes = 60 cases
-```
-
-### Fix: Hot QD8 Phase-1 Protocol Stall
-
-The ONFI-5.2 8-channel PCIe-only sweep later stalled at:
-
-```text
-hot_pcie_4096_qd8
-```
-
-This was not PopNet runtime. The run never reached phase 2 and produced no
-`bench.txt` or `delayInfo.txt`. SimpleSSD had emitted all eight return-path
-`[INTERCMD] WRITE` messages, but the two simlets did not finish the round.
-
-Root cause:
-
-```text
-LEGOSIM_MICRO/interchiplet/srcs/interchiplet.cpp
-```
-
-only parsed protocol commands when a captured output line started exactly with
-`[INTERCMD]`. In hot-cache runs, SimpleSSD simulator logging can interleave with
-protocol stdout, causing valid `[INTERCMD]` messages to appear later in the same
-captured line. Those commands were silently ignored, which could leave one side
-waiting for a SYNC forever.
-
-Fix:
-
-```text
-parse_command now searches each captured line for "[INTERCMD]" and parses the
-command substring even if simulator text appears before it.
-```
-
-Validation:
-
-```text
-hot 4KB QD8  completed in /tmp/sim_hot_qd8_fix  with 16 bench/delay records
-hot 4KB QD16 completed in /tmp/sim_hot_qd16_fix with 32 bench/delay records
-```
-
-The killed QD8 row remains recorded as `STOPPED` in the CSV from the aborted
-run. A resumed harness run will re-run non-OK rows while preserving completed
-OK rows.
-
-### Completed: ONFI-5.2 8-Channel PCIe-Only p Characterization
-
-Resumed the sequential harness after the hot-cache protocol parser fix.
-
-The previously stalled case:
-
-```text
-hot_pcie_4096_qd8
-```
-
-completed successfully after the fix:
-
-```text
-cycles = 19264088
-p_wall = 0.554191820552
-done_at = 2026-08-22 16:00:33 UTC+8
-```
-
-The full 60-case sweep then completed:
-
-```text
-status summary: OK=60 RUNNING=0 PENDING=0 FAIL=0 STOPPED=0 total=60
-final case: hot_pcie_4194304_qd16
-final case cycles = 21728994047
-final case p_wall = 0.727770278403
-final case done_at = 2026-08-23 10:04:00 UTC+8
-```
-
-Validation rule:
-
-```text
-expected_records = 2 * QD
-bench_records    = expected_records
-delay_records    = expected_records
-popnet_tx_count  = expected_records
-popnet_finished  = expected_records
-status           = OK
-```
-
-Validation result:
-
-```text
-rows = 60
-invalid = 0
-```
-
-Generated validation and plots:
-
-```text
-results/plot_pcie_p_characterization.py
-results/pcie_p_characterization_8ch_onfi52_validation.csv
-results/pcie_p_characterization_8ch_onfi52_p_heatmap.png
-results/pcie_p_characterization_8ch_onfi52_p_lines.png
-```
-
-Quick p-wall sanity summary:
-
-```text
-cold min p_wall = 0.029400 at 4KB QD8
-cold max p_wall = 0.869557 at 4MB QD4
-hot  min p_wall = 0.056012 at 64KB QD1
-hot  max p_wall = 0.868426 at 16KB QD8
-```
-
-Next analysis step:
-
-```text
-Use the p_wall heatmap/line plots to identify SSD-dominated and
-link-dominated regions, then plug p_wall into the PCIe->UCIe analytical
-speedup model before running targeted UCIe validation cases.
-```
-
-### HIL Read-Path Instrumentation for Cold QD1 Analytical Model
-
-Instrumented the actual SimpleSSD HIL read path used by the LegoSim cold-read
-configuration:
-
-```text
-SimpleSSD-Standalone/simplessd/hil/hil.cc
-```
-
-The instrumentation logs the HIL READ CPU scheduling boundary and the downstream
-ICL call boundary:
-
-```text
-HIL_SUBMIT
-HIL_BEGIN
-HIL_CPU = HIL_BEGIN - HIL_SUBMIT
-ICL_BEGIN
-ICL_END
-ICL_ELAPSED = ICL_END - ICL_BEGIN
-HIL_BODY_EXCLUSIVE
-HIL_EXCLUSIVE = HIL_CPU + HIL_BODY_EXCLUSIVE
-```
-
-This preserves simulator timing; it only adds log output. The SimpleSSD target
-was rebuilt successfully:
-
-```text
-cmake --build SimpleSSD-Standalone/build --target simplessd-legosim -j$(nproc)
-```
-
-Added a `--modes` option to the PCIe characterization harness so this
-measurement can run cold-only:
-
-```text
-results/run_pcie_p_characterization.py --modes cold --qds 1
-```
-
-Ran the cold PCIe QD1 sweep for:
-
-```text
-4KB, 16KB, 64KB, 256KB, 1MB, 4MB
-```
-
-The first five harness rows completed normally and exactly matched the previous
-PCIe QD1 characterization timing. The 4MB run produced the required SimpleSSD
-HIL log and the converged final cycle in `interchiplet.out`; the wrapper was
-stopped while waiting in the later PopNet convergence phase, so the raw harness
-CSV leaves that row as RUNNING. The summary uses the already validated PCIe QD1
-4MB timing for the denominator.
-
-Extracted summary:
-
-```text
-results/extract_hil_cold_qd1.py
-results/hil_cold_qd1_summary.csv
-```
-
-Result:
-
-```text
-size_bytes  T_HIL(ps)  T_SSD,cold(ps)  T_HIL/T_SSD,cold
-4096        1492500    48873986        0.0305377
-16384       1492500    50973986        0.0292796
-65536       1492500    60073986        0.0248444
-262144      1492500    97873986        0.0152492
-1048576     1492500    249073986       0.0059922
-4194304     1492500    878873986       0.0016982
-```
-
-Conclusion for the first-order cold QD1 analytical model:
-
-```text
-T_HIL = 1,492,500 ps = 1.4925 us
-```
-
-In this current configuration, `T_HIL` is a fixed per-request CPU scheduling
-term for `CPU::HIL, CPU::READ`. It does not scale with request size in the
-measured QD1 cold-read path. The size-dependent work is downstream of HIL,
-primarily inside ICL/FTL/PAL. For large requests, HIL is safely negligible; for
-4KB to 16KB requests it is still only about 3 percent of `T_SSD,cold`.
-
-### NAND Type Switched from MLC to SLC
-
-Changed both active SimpleSSD configs from MLC to SLC:
-
-```text
-SimpleSSD-Standalone/simplessd/config/sample.cfg
-SimpleSSD-Standalone/simplessd/config/sample_nocache.cfg
-```
-
-Config change:
-
-```text
-NANDType = 1  # MLC
-NANDType = 0  # SLC
-```
-
-No rebuild is required because this is a runtime config value. With SLC,
-SimpleSSD's PAL selects `LatencySLC` and uses the existing LSB timing fields:
-
-```text
-LSBRead  = 40000000 ps
-LSBWrite = 500000000 ps
-```
-
-Any results collected before this point used MLC and should not be mixed with
-new SLC results.

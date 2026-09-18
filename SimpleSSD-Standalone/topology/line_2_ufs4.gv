@@ -1,0 +1,13 @@
+graph line_2_ufs4
+{
+    // UFS 4.0 two-lane raw line rate is modeled by the YAML clock_rate:
+    // -F 1 = 8 bytes/PopNet-cycle, clock_rate = 0.000725, so one PopNet
+    // cycle is 1379.31 ps and steady bandwidth is 5.8 GB/s.
+    //
+    // Use ~7 ns as the current fixed one-hop M-PHY line timing anchor,
+    // matching SimpleSSD's MIPI::M_PHY::tLine constant. In this clock domain
+    // 7 ns / 1.37931 ns = 5.075 PopNet cycles.
+    edge[weight=5.075]
+    node[pipeline_stage_delay=1]
+    0--1
+}

@@ -1,0 +1,7 @@
+size_bytes,t_hil_start_cycle,t_hil_end_cycle,t_hil_cycle,t_hil_exclusive_cycle,hil_body_exclusive_cycle,icl_elapsed_cycle,hil_inclusive_body_cycle,t_ssd_cold_cycle,t_hil_over_t_ssd_cold,final_cycle,t_link_occupied_cycle,source_log
+4096,511356750,512849250,1492500,1492500,0,47381485,47381485,48873986.0,0.030537717958997655,50824986.0,1951000.0,/home/csld/SIM/hil_cold_qd1_instrumentation/cold_pcie_4096_qd1/proc_r3_p1_t1/simplessd.log
+16384,513456750,514949250,1492500,1492500,0,49481485,49481485,50973986.0,0.029279640795601112,58556986.0,7583000.0,/home/csld/SIM/hil_cold_qd1_instrumentation/cold_pcie_16384_qd1/proc_r3_p1_t1/simplessd.log
+65536,517656750,519149250,1492500,1492500,0,58581485,58581485,60073986.0,0.0248443644142408,90184986.0,30111000.0,/home/csld/SIM/hil_cold_qd1_instrumentation/cold_pcie_65536_qd1/proc_r3_p1_t1/simplessd.log
+262144,526056750,527549250,1492500,1492500,0,96381485,96381485,97873986.0,0.015249200129644255,218096986.0,120223000.0,/home/csld/SIM/hil_cold_qd1_instrumentation/cold_pcie_262144_qd1/proc_r3_p1_t1/simplessd.log
+1048576,559656750,561149250,1492500,1492500,0,247581485,247581485,249073986.0,0.005992195427426131,729744986.0,480671000.0,/home/csld/SIM/hil_cold_qd1_instrumentation/cold_pcie_1048576_qd1/proc_r3_p1_t1/simplessd.log
+4194304,1908801001,1910293501,1492500,1492500,0,877381485,877381485,878873986.0,0.0016981956728435925,2801336986.0,1922463000.0,/home/csld/SIM/hil_cold_qd1_instrumentation/cold_pcie_4194304_qd1/proc_r2_p1_t1/simplessd.log

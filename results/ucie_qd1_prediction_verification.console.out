@@ -1,0 +1,27 @@
+run_root=/home/csld/SIM/ucie_qd1_prediction_verification
+csv=/home/csld/SIM/results/ucie_qd1_prediction_verification.csv
+cases=12 sequential=true link_speedup=3.66
+run 1/12 cold_ucie_4096_qd1
+done cold_ucie_4096_qd1: cycles=49407986 pred_speedup=1.02869914319 meas_speedup=1.02867957419 p_wall_ucie=0.0108079693837 done_at=2026-08-26 13:45:48
+run 2/12 cold_ucie_16384_qd1
+done cold_ucie_16384_qd1: cycles=53043986 pred_speedup=1.10389394661 meas_speedup=1.1039326117 p_wall_ucie=0.039024216619 done_at=2026-08-26 13:45:55
+run 3/12 cold_ucie_65536_qd1
+done cold_ucie_65536_qd1: cycles=68287986 pred_speedup=1.32040437984 meas_speedup=1.32065669648 p_wall_ucie=0.120284701324 done_at=2026-08-26 13:46:04
+run 4/12 cold_ucie_262144_qd1
+done cold_ucie_262144_qd1: cycles=130663986 pred_speedup=1.66840561906 meas_speedup=1.66914382973 p_wall_ucie=0.250949025847 done_at=2026-08-26 13:46:19
+run 5/12 cold_ucie_1048576_qd1
+done cold_ucie_1048576_qd1: cycles=380167986 pred_speedup=1.91833770313 meas_speedup=1.91953297719 p_wall_ucie=0.34483177129 done_at=2026-08-26 13:48:26
+run 6/12 cold_ucie_4194304_qd1
+done cold_ucie_4194304_qd1: cycles=1403183986 pred_speedup=1.99505944576 meas_speedup=1.99641459278 p_wall_ucie=0.373657343036 done_at=2026-08-26 14:13:22
+run 7/12 hot_ucie_4096_qd1
+done hot_ucie_4096_qd1: cycles=5506581 pred_speedup=1.25754310217 meas_speedup=1.25732845844 p_wall_ucie=0.0969748742459 done_at=2026-08-26 14:13:30
+run 8/12 hot_ucie_16384_qd1
+done hot_ucie_16384_qd1: cycles=9142581 pred_speedup=1.60267689714 meas_speedup=1.60300258756 p_wall_ucie=0.226413088383 done_at=2026-08-26 14:13:38
+run 9/12 hot_ucie_65536_qd1
+done hot_ucie_65536_qd1: cycles=515683251 pred_speedup=1.04243573361 meas_speedup=1.04246211208 p_wall_ucie=0.0159283823628 done_at=2026-08-26 14:13:46
+run 10/12 hot_ucie_262144_qd1
+done hot_ucie_262144_qd1: cycles=540259251 pred_speedup=1.16171094977 meas_speedup=1.16183526675 p_wall_ucie=0.0606930838099 done_at=2026-08-26 14:14:02
+run 11/12 hot_ucie_1048576_qd1
+done hot_ucie_1048576_qd1: cycles=638563251 pred_speedup=1.55744656576 meas_speedup=1.52846135206 p_wall_ucie=0.205295246469 done_at=2026-08-26 14:16:10
+run 12/12 hot_ucie_4194304_qd1
+done hot_ucie_4194304_qd1: cycles=1888123502 pred_speedup=1.76430761514 meas_speedup=1.70818248784 p_wall_ucie=0.277688403033 done_at=2026-08-26 14:41:27

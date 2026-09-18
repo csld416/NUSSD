@@ -101,10 +101,13 @@ void parse_command(char* __pipe_buf, ProcessStruct* __proc_struct, int __stdin_f
         lines.pop_back();
     }
 
-    // Get line start with [INTERCMD]
+    // Simulator logs can interleave with protocol stdout in the same captured
+    // line. Extract the command even if it is not at column zero.
     for (std::size_t i = 0; i < lines.size(); i++) {
         std::string l = lines[i];
-        if (l.substr(0, 10) == "[INTERCMD]") {
+        std::size_t cmd_pos = l.find("[INTERCMD]");
+        if (cmd_pos != std::string::npos) {
+            l = l.substr(cmd_pos);
             InterChiplet::SyncCommand cmd = InterChiplet::parseCmd(l);
             cmd.m_stdin_fd = __stdin_fd;
             cmd.m_clock_rate = __proc_struct->m_clock_rate;

@@ -25,6 +25,15 @@ namespace SimpleSSD {
 
 namespace HIL {
 
+namespace {
+
+struct HilReadMeasureContext {
+  Request *request;
+  uint64_t submittedAt;
+};
+
+}  // namespace
+
 HIL::HIL(ConfigReader &c) : conf(c), reqCount(0), lastScheduled(0) {
   pICL = new ICL::ICL(conf);
 
@@ -39,7 +48,9 @@ HIL::~HIL() {
 
 void HIL::read(Request &req) {
   DMAFunction doRead = [this](uint64_t beginAt, void *context) {
-    auto pReq = (Request *)context;
+    auto measure = (HilReadMeasureContext *)context;
+    auto pReq = measure->request;
+    uint64_t submittedAt = measure->submittedAt;
     uint64_t tick = beginAt;
 
     pReq->reqID = ++reqCount;
@@ -51,7 +62,9 @@ void HIL::read(Request &req) {
                pReq->length);
 
     ICL::Request reqInternal(*pReq);
+    uint64_t iclBegin = tick;
     pICL->read(reqInternal, tick);
+    uint64_t iclEnd = tick;
 
     stat.request[0]++;
     stat.iosize[0] += pReq->length;
@@ -63,10 +76,29 @@ void HIL::read(Request &req) {
 
     updateCompletion();
 
+    uint64_t hilCpuLatency = beginAt - submittedAt;
+    uint64_t hilInclusive = tick - beginAt;
+    uint64_t iclElapsed = iclEnd - iclBegin;
+    uint64_t hilBodyExclusive =
+        hilInclusive >= iclElapsed ? hilInclusive - iclElapsed : 0;
+
+    debugprint(LOG_HIL,
+               "MEASURE_READ | REQ %7u | BYTE %" PRIu64
+               " | HIL_SUBMIT %" PRIu64 " | HIL_BEGIN %" PRIu64
+               " | HIL_CPU %" PRIu64 " | ICL_BEGIN %" PRIu64
+               " | ICL_END %" PRIu64 " | ICL_ELAPSED %" PRIu64
+               " | HIL_END %" PRIu64 " | HIL_BODY_EXCLUSIVE %" PRIu64
+               " | HIL_EXCLUSIVE %" PRIu64,
+               pReq->reqID, pReq->length, submittedAt, beginAt, hilCpuLatency,
+               iclBegin, iclEnd, iclElapsed, tick, hilBodyExclusive,
+               hilCpuLatency + hilBodyExclusive);
+
     delete pReq;
+    delete measure;
   };
 
-  execute(CPU::HIL, CPU::READ, doRead, new Request(req));
+  execute(CPU::HIL, CPU::READ, doRead,
+          new HilReadMeasureContext{new Request(req), getTick()});
 }
 
 void HIL::write(Request &req) {

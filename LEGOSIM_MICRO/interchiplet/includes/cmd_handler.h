@@ -389,7 +389,7 @@ class SyncCommStruct {
         for (std::size_t i = 0; i < cmd_list.size(); i++) {
             InterChiplet::SyncCommand& __write_cmd = cmd_list[i];
             if (__cmd.m_src == __write_cmd.m_src && __cmd.m_dst == __write_cmd.m_dst &&
-                __cmd.m_nbytes == __write_cmd.m_nbytes) {
+                __cmd.m_nbytes == __write_cmd.m_nbytes && __cmd.m_desc == __write_cmd.m_desc) {
                 return true;
             }
         }
@@ -402,7 +402,7 @@ class SyncCommStruct {
         for (std::size_t i = 0; i < cmd_list.size(); i++) {
             InterChiplet::SyncCommand& __write_cmd = cmd_list[i];
             if (__cmd.m_src == __write_cmd.m_src && __cmd.m_dst == __write_cmd.m_dst &&
-                __cmd.m_nbytes == __write_cmd.m_nbytes) {
+                __cmd.m_nbytes == __write_cmd.m_nbytes && __cmd.m_desc == __write_cmd.m_desc) {
                 InterChiplet::SyncCommand match_cmd = cmd_list[i];
                 cmd_list.erase(cmd_list.begin() + i);
                 return match_cmd;
@@ -435,7 +435,7 @@ class SyncCommStruct {
         for (std::size_t i = 0; i < cmd_list.size(); i++) {
             InterChiplet::SyncCommand& __read_cmd = cmd_list[i];
             if (__cmd.m_src == __read_cmd.m_src && __cmd.m_dst == __read_cmd.m_dst &&
-                __cmd.m_nbytes == __read_cmd.m_nbytes) {
+                __cmd.m_nbytes == __read_cmd.m_nbytes && __cmd.m_desc == __read_cmd.m_desc) {
                 return true;
             }
         }
@@ -448,7 +448,7 @@ class SyncCommStruct {
         for (std::size_t i = 0; i < cmd_list.size(); i++) {
             InterChiplet::SyncCommand& __read_cmd = cmd_list[i];
             if (__cmd.m_src == __read_cmd.m_src && __cmd.m_dst == __read_cmd.m_dst &&
-                __cmd.m_nbytes == __read_cmd.m_nbytes) {
+                __cmd.m_nbytes == __read_cmd.m_nbytes && __cmd.m_desc == __read_cmd.m_desc) {
                 InterChiplet::SyncCommand match_cmd = cmd_list[i];
                 cmd_list.erase(cmd_list.begin() + i);
                 return match_cmd;

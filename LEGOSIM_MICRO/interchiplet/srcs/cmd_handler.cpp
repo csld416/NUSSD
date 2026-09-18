@@ -243,11 +243,13 @@ void handle_read_cmd(const InterChiplet::SyncCommand& __cmd, SyncStruct* __sync_
                       static_cast<InterChiplet::TimeType>(DST_DELAY(end_cycle)));
         // Send synchronize command to response READ command.
         InterChiplet::sendSyncCmd(__cmd.m_stdin_fd, static_cast<InterChiplet::TimeType>(
-                                                        DST_DELAY(end_cycle) * __cmd.m_clock_rate));
+                                                        DST_DELAY(end_cycle) * __cmd.m_clock_rate),
+                                   __cmd.m_desc);
         // Send synchronize command to response WRITE command.
         InterChiplet::sendSyncCmd(
             write_cmd.m_stdin_fd,
-            static_cast<InterChiplet::TimeType>(SRC_DELAY(end_cycle) * write_cmd.m_clock_rate));
+            static_cast<InterChiplet::TimeType>(SRC_DELAY(end_cycle) * write_cmd.m_clock_rate),
+            write_cmd.m_desc);
     }
 }
 
@@ -464,10 +466,12 @@ void handle_write_cmd(const InterChiplet::SyncCommand& __cmd, SyncStruct* __sync
 
         // Send synchronize command to response WRITE command.
         InterChiplet::sendSyncCmd(__cmd.m_stdin_fd, static_cast<InterChiplet::TimeType>(
-                                                        SRC_DELAY(end_cycle) * __cmd.m_clock_rate));
+                                                        SRC_DELAY(end_cycle) * __cmd.m_clock_rate),
+                                   __cmd.m_desc);
         // Send synchronize command to response READ command.
         InterChiplet::sendSyncCmd(
             read_cmd.m_stdin_fd,
-            static_cast<InterChiplet::TimeType>(DST_DELAY(end_cycle) * read_cmd.m_clock_rate));
+            static_cast<InterChiplet::TimeType>(DST_DELAY(end_cycle) * read_cmd.m_clock_rate),
+            read_cmd.m_desc);
     }
 }

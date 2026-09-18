@@ -1,0 +1,16 @@
+run_root=/home/csld/SIM/pcie_p_characterization_42ch
+csv=/home/csld/SIM/results/pcie_p_characterization_42ch.csv
+sizes=4096,16384,65536,262144,1048576,4194304
+qds=1,2,4,8,16,32
+cases=72 sequential=true
+run 1/72 cold_pcie_4096_qd1
+done cold_pcie_4096_qd1: cycles=85576878 link=1951000.000000 p=0.022798214256 done_at=2026-08-21 20:14:45
+run 2/72 cold_pcie_4096_qd2
+done cold_pcie_4096_qd2: cycles=164677757 link=3909000.000000 p=0.023737267687 done_at=2026-08-21 20:14:54
+run 3/72 cold_pcie_4096_qd4
+done cold_pcie_4096_qd4: cycles=323805515 link=8772000.000000 p=0.0270903353823 done_at=2026-08-21 20:15:02
+run 4/72 cold_pcie_4096_qd8
+done cold_pcie_4096_qd8: cycles=641141031 link=22254000.000000 p=0.0347099919113 done_at=2026-08-21 20:15:11
+run 5/72 cold_pcie_4096_qd16
+done cold_pcie_4096_qd16: cycles=655907039 link=64305000.000000 p=0.0980398077417 done_at=2026-08-21 20:15:20
+run 6/72 cold_pcie_4096_qd32

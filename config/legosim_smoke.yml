@@ -2,23 +2,23 @@
 #
 # Run from anywhere with (--cwd controls where the run's output/scratch
 # subdirectories get created; this file's own location doesn't matter):
-#   SIMULATOR_ROOT=/Users/csld/ECLAB/SIM/LEGOSIM_MICRO \
-#     /Users/csld/ECLAB/SIM/LEGOSIM_MICRO/interchiplet/bin/interchiplet \
-#     /Users/csld/ECLAB/SIM/config/legosim_smoke.yml \
-#     --cwd /Users/csld/ECLAB/SIM/SimpleSSD-Standalone -t 3 -w 2 -f 2
+#   SIMULATOR_ROOT=/home/csld/SIM/LEGOSIM_MICRO \
+#     /home/csld/SIM/LEGOSIM_MICRO/interchiplet/bin/interchiplet \
+#     /home/csld/SIM/config/legosim_smoke.yml \
+#     --cwd /home/csld/SIM/SimpleSSD-Standalone -t 3 -w 2 -f 2
 
 phase1:
-  - cmd: "/Users/csld/ECLAB/SIM/dummy_npu/build/simplessd-dummy-npu"
-    args: ["0", "0", "1", "0", "4096", "1", "1"]
-    log: "dummy_npu.log"
+  - cmd: "/home/csld/SIM/PyTorchSim/TOGSim/tests/build/dram_legosim_driver"
+    args: ["4096"]
+    log: "togsim_dram_legosim.log"
     is_to_stdout: false
     clock_rate: 1
 
-  - cmd: "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/build/simplessd-legosim"
+  - cmd: "/home/csld/SIM/SimpleSSD-Standalone/build/simplessd-legosim"
     args:
-      - "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/config/sample.cfg"
-      - "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/simplessd/config/sample.cfg"
-      - "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/build"
+      - "/home/csld/SIM/SimpleSSD-Standalone/config/sample.cfg"
+      - "/home/csld/SIM/SimpleSSD-Standalone/simplessd/config/sample.cfg"
+      - "/home/csld/SIM/SimpleSSD-Standalone/build"
       - "1"
       - "0"
       - "0"
@@ -30,7 +30,7 @@ phase1:
     clock_rate: 1
 
 phase2:
-  - cmd: "/Users/csld/ECLAB/SIM/LEGOSIM_MICRO/popnet_chiplet/build/popnet"
+  - cmd: "/home/csld/SIM/LEGOSIM_MICRO/popnet_chiplet/build/popnet"
     args:
       - "-A"
       - "2"
@@ -53,10 +53,12 @@ phase2:
       - "-I"
       - "../bench.txt"
       - "-G"
-      - "/Users/csld/ECLAB/SIM/SimpleSSD-Standalone/topology/line_2.gv"
+      - "/home/csld/SIM/SimpleSSD-Standalone/topology/line_2.gv"
       - "-D"
       - "../delayInfo.txt"
       - "-P"
     log: "popnet_0.log"
     is_to_stdout: false
-    clock_rate: 1
+    # PopNet cycles are modeled as ns; SimpleSSD/interchiplet ticks are ps.
+    # This converts bench timestamps ps->ns and delayInfo ns->ps.
+    clock_rate: 0.001

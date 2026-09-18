@@ -57,12 +57,8 @@ void mess_queue::simulator() {
 		//changed at 2020-5-23
 		//输出日志
 		//logfile<<current_message;
-		if(current_message.event_type()==WIRE_||current_message.event_type()==CREDIT_){
-			logfile<<"\tFrom Router "<<current_message.src()
-				<<" to Router "<<current_message.des()
-				<<" Port "<<current_message.pc()
-				<<" Virtual Channel "<<current_message.vc()<<endl;
-		}
+		// Per-event tracing is intentionally disabled; it dominates host runtime
+		// for large packets and does not contribute to simulated timing.
 		remove_top_message();
 		//保证当前时间小于或等于事件开始时间
 		Sassert(static_cast<bool>(current_time_ <= ((current_message.

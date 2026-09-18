@@ -1,0 +1,73 @@
+memory_mode,variant,size_bytes,queue_depth,total_bytes,status,started_at_taipei,done_at_taipei,final_cycle,t_request_cycle,t_link_cycle,t_ssd_cycle,p_link_fraction,throughput_bytes_per_cycle,bench_records,delay_records,popnet_tx_count,popnet_finished,error,run_dir
+cold,pcie,4096,1,4096,OK,2026-08-21 20:14:37,2026-08-21 20:14:45,85576878,85576878,1951000.000000,83625878.000000,0.022798214256,4.78633959982e-05,2,2,2,2,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4096_qd1
+cold,pcie,4096,2,8192,OK,2026-08-21 20:14:45,2026-08-21 20:14:54,164677757,164677757,3909000.000000,160768757.000000,0.023737267687,4.97456374755e-05,4,4,4,4,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4096_qd2
+cold,pcie,4096,4,16384,OK,2026-08-21 20:14:54,2026-08-21 20:15:02,323805515,323805515,8772000.000000,315033515.000000,0.0270903353823,5.05982734729e-05,8,8,8,8,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4096_qd4
+cold,pcie,4096,8,32768,OK,2026-08-21 20:15:02,2026-08-21 20:15:11,641141031,641141031,22254000.000000,618887031.000000,0.0347099919113,5.11088799743e-05,16,16,16,16,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4096_qd8
+cold,pcie,4096,16,65536,OK,2026-08-21 20:15:11,2026-08-21 20:15:20,655907039,655907039,64305000.000000,591602039.000000,0.0980398077417,9.99165980897e-05,32,32,32,32,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4096_qd16
+cold,pcie,4096,32,131072,STOPPED,2026-08-21 20:15:20,2026-08-21 20:50:00,,,,,,,,,,,stopped before ONFI52 rerun,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4096_qd32
+cold,pcie,16384,1,16384,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_16384_qd1
+cold,pcie,16384,2,32768,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_16384_qd2
+cold,pcie,16384,4,65536,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_16384_qd4
+cold,pcie,16384,8,131072,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_16384_qd8
+cold,pcie,16384,16,262144,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_16384_qd16
+cold,pcie,16384,32,524288,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_16384_qd32
+cold,pcie,65536,1,65536,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_65536_qd1
+cold,pcie,65536,2,131072,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_65536_qd2
+cold,pcie,65536,4,262144,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_65536_qd4
+cold,pcie,65536,8,524288,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_65536_qd8
+cold,pcie,65536,16,1048576,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_65536_qd16
+cold,pcie,65536,32,2097152,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_65536_qd32
+cold,pcie,262144,1,262144,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_262144_qd1
+cold,pcie,262144,2,524288,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_262144_qd2
+cold,pcie,262144,4,1048576,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_262144_qd4
+cold,pcie,262144,8,2097152,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_262144_qd8
+cold,pcie,262144,16,4194304,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_262144_qd16
+cold,pcie,262144,32,8388608,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_262144_qd32
+cold,pcie,1048576,1,1048576,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_1048576_qd1
+cold,pcie,1048576,2,2097152,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_1048576_qd2
+cold,pcie,1048576,4,4194304,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_1048576_qd4
+cold,pcie,1048576,8,8388608,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_1048576_qd8
+cold,pcie,1048576,16,16777216,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_1048576_qd16
+cold,pcie,1048576,32,33554432,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_1048576_qd32
+cold,pcie,4194304,1,4194304,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4194304_qd1
+cold,pcie,4194304,2,8388608,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4194304_qd2
+cold,pcie,4194304,4,16777216,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4194304_qd4
+cold,pcie,4194304,8,33554432,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4194304_qd8
+cold,pcie,4194304,16,67108864,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4194304_qd16
+cold,pcie,4194304,32,134217728,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/cold_pcie_4194304_qd32
+hot,pcie,4096,1,4096,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4096_qd1
+hot,pcie,4096,2,8192,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4096_qd2
+hot,pcie,4096,4,16384,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4096_qd4
+hot,pcie,4096,8,32768,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4096_qd8
+hot,pcie,4096,16,65536,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4096_qd16
+hot,pcie,4096,32,131072,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4096_qd32
+hot,pcie,16384,1,16384,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_16384_qd1
+hot,pcie,16384,2,32768,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_16384_qd2
+hot,pcie,16384,4,65536,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_16384_qd4
+hot,pcie,16384,8,131072,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_16384_qd8
+hot,pcie,16384,16,262144,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_16384_qd16
+hot,pcie,16384,32,524288,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_16384_qd32
+hot,pcie,65536,1,65536,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_65536_qd1
+hot,pcie,65536,2,131072,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_65536_qd2
+hot,pcie,65536,4,262144,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_65536_qd4
+hot,pcie,65536,8,524288,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_65536_qd8
+hot,pcie,65536,16,1048576,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_65536_qd16
+hot,pcie,65536,32,2097152,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_65536_qd32
+hot,pcie,262144,1,262144,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_262144_qd1
+hot,pcie,262144,2,524288,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_262144_qd2
+hot,pcie,262144,4,1048576,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_262144_qd4
+hot,pcie,262144,8,2097152,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_262144_qd8
+hot,pcie,262144,16,4194304,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_262144_qd16
+hot,pcie,262144,32,8388608,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_262144_qd32
+hot,pcie,1048576,1,1048576,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_1048576_qd1
+hot,pcie,1048576,2,2097152,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_1048576_qd2
+hot,pcie,1048576,4,4194304,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_1048576_qd4
+hot,pcie,1048576,8,8388608,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_1048576_qd8
+hot,pcie,1048576,16,16777216,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_1048576_qd16
+hot,pcie,1048576,32,33554432,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_1048576_qd32
+hot,pcie,4194304,1,4194304,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4194304_qd1
+hot,pcie,4194304,2,8388608,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4194304_qd2
+hot,pcie,4194304,4,16777216,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4194304_qd4
+hot,pcie,4194304,8,33554432,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4194304_qd8
+hot,pcie,4194304,16,67108864,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4194304_qd16
+hot,pcie,4194304,32,134217728,PENDING,,,,,,,,,,,,,,/home/csld/SIM/pcie_p_characterization_42ch/hot_pcie_4194304_qd32

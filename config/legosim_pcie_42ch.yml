@@ -1,0 +1,93 @@
+# PCIe-equivalent LegoSim harness for the SimpleSSD active simlet, using 42 flash channels.
+# Purpose: test whether raising aggregate NAND interface bandwidth above the PCIe-equivalent link makes PCIe the dominant term.
+#
+# Interconnect modeling assumptions (see LOG.md / advisor throughput-gain
+# request for derivation):
+#   - Assumed link clock: 1 GHz (1 cycle = 1ns), matching dram_freq_mhz
+#     already used elsewhere in this pipeline.
+#   - Bandwidth target: PCIe 5.0 x4 effective ~15.8 GB/s -> flit_size=2
+#     (64-bit words/flit) -> 16 bytes/cycle = 16 GB/s at 1GHz.
+#   - Latency target: PCIe controller/retimer raw roundtrip ~30-40ns
+#     (host-software-stack latency, e.g. MMIO ~750ns, deliberately excluded
+#     -- this compares raw link only) -> topology edge weight=40 in
+#     line_2_pcie.gv.
+#   - NOTE: popnet's -L (link_length) flag does NOT drive timing for this
+#     graph-topology (-G) mode -- CGraphTopo reads per-hop delay from the
+#     .gv file's edge `weight`, not from -L. -L only feeds the power model.
+#   - NOTE: -G alone does not activate graph-topology routing -- the router
+#     defaults to plain XY mesh (routing_alg=0), which ignores the .gv file's
+#     edge weights entirely. -R 4 (GRAPH_TOPO, see popnet_chiplet/index.h)
+#     is required for the weight to have any effect on timing.
+#   - NOTE: -T is popnet's own internal simulated-cycle window, independent
+#     of dram_freq_mhz/the flash-side cycle count. At large request sizes
+#     (confirmed at 8MB) the flash-side transaction can start later than the
+#     original -T 1000000000 window, silently dropping that transaction from
+#     delayInfo.txt ("Transaction count: 2" but "total finished: 1" in
+#     popnet_0.log) and corrupting round-2 convergence. Bumped to 2e10 for
+#     headroom; if sweeping past ~8MB again, re-check popnet_0.log's
+#     "total finished" against "Transaction count" before trusting the result.
+#
+# Run from anywhere with (--cwd controls where the run's output/scratch
+# subdirectories get created; this file's own location doesn't matter):
+#   SIMULATOR_ROOT=/home/csld/SIM/LEGOSIM_MICRO \
+#     /home/csld/SIM/LEGOSIM_MICRO/interchiplet/bin/interchiplet \
+#     /home/csld/SIM/config/legosim_pcie.yml \
+#     --cwd <RUN_DIR> -t 3 -w 2 -f 2
+
+phase1:
+  - cmd: "/home/csld/SIM/PyTorchSim/TOGSim/tests/build/dram_legosim_driver"
+    args: ["4096"]
+    log: "togsim_dram_legosim.log"
+    is_to_stdout: false
+    clock_rate: 1
+
+  - cmd: "/home/csld/SIM/SimpleSSD-Standalone/build/simplessd-legosim"
+    args:
+      - "/home/csld/SIM/SimpleSSD-Standalone/config/sample.cfg"
+      - "/home/csld/SIM/SimpleSSD-Standalone/simplessd/config/sample_42ch_nocache.cfg"
+      - "/home/csld/SIM/SimpleSSD-Standalone/build"
+      - "1"
+      - "0"
+      - "0"
+      - "0"
+      - "4096"
+      - "1"
+    log: "simplessd.log"
+    is_to_stdout: false
+    clock_rate: 1
+
+phase2:
+  - cmd: "/home/csld/SIM/LEGOSIM_MICRO/popnet_chiplet/build/popnet"
+    args:
+      - "-A"
+      - "2"
+      - "-c"
+      - "1"
+      - "-V"
+      - "3"
+      - "-B"
+      - "12"
+      - "-O"
+      - "12"
+      - "-F"
+      - "2"
+      - "-L"
+      - "1000"
+      - "-T"
+      - "20000000000"
+      - "-r"
+      - "1"
+      - "-I"
+      - "../bench.txt"
+      - "-G"
+      - "/home/csld/SIM/SimpleSSD-Standalone/topology/line_2_pcie.gv"
+      - "-R"
+      - "4"
+      - "-D"
+      - "../delayInfo.txt"
+      - "-P"
+    log: "popnet_0.log"
+    is_to_stdout: false
+    # PopNet cycles are modeled as ns; SimpleSSD/interchiplet ticks are ps.
+    # This converts bench timestamps ps->ns and delayInfo ns->ps.
+    clock_rate: 0.001

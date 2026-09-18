@@ -7,6 +7,11 @@
 # macOS
 .DS_Store
 
+# Agents
+.agents/
+.claude/
+.codex/
+
 # Editors
 .vscode/
 .vs/
@@ -24,6 +29,17 @@ cmake_install.cmake
 install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
+# Experiment output. Keep the harness scripts, summary CSVs and plots
+# (~1.2MB, this is the actual research output); exclude the archived raw run
+# directories (~3.2GB of per-run scratch: bench.txt, delayInfo.txt, proc_r*
+# dirs, simulator logs).
+results/tmp/
+results/__pycache__/
+results/*_runs/
+
+# Scratch / local run bookkeeping
+tmpReport.txt
+.monitor_done_times.tsv
 
 # Compiled objects / libraries / binaries
 *.o

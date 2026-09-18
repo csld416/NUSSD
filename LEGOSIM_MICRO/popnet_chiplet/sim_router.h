@@ -23,6 +23,7 @@ extern "C" {
 
 //changed at 2021-10-26
 #include<queue>
+#include<deque>
 
 //changed at 2022-4-4
 #include"graph_lib/graph.h"
@@ -40,7 +41,7 @@ class input_template {
 
 	private:
 		//input buffers: <phy<vc<buffer>>>
-		vector<vector<vector<flit_template> > > input_;
+		vector<vector<deque<flit_template> > > input_;
 		//the state of each input vc
 		vector<vector<VC_state_type> > states_;
 		//the candidate routing vcs
@@ -54,18 +55,18 @@ class input_template {
 //---------------------------------------------------------------------------//
 //---------------------------------------------------------------------------//
 	public:
-		vector<vector<vector<flit_template> > > & input() {return input_;}
-		const vector<vector<vector<flit_template> > > & input() const 
-						   {return input_;}
-		const vector<flit_template> & input(long a, long b) const 
-							 {return input_[a][b];} 
-		vector<flit_template> & input(long a, long b) {return input_[a][b];} 
+		vector<vector<deque<flit_template> > > & input() {return input_;}
+		const vector<vector<deque<flit_template> > > & input() const 
+							   {return input_;}
+		const deque<flit_template> & input(long a, long b) const 
+								 {return input_[a][b];} 
+		deque<flit_template> & input(long a, long b) {return input_[a][b];} 
 //---------------------------------------------------------------------------//
 		void add_flit(long a, long b, const flit_template & c)
 		{	
 			 input_[a][b].push_back(c);}
 		void remove_flit(long a, long b)  
-				 {input_[a][b].erase(input_[a][b].begin());}
+					 {input_[a][b].pop_front();}
 
 		flit_template & get_flit(long a, long b) 
 				{Sassert(input_[a][b].size() > 0);

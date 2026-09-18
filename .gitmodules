@@ -1,0 +1,3 @@
+[submodule "PytorchSim-S"]
+	path = PytorchSim-S
+	url = https://github.com/csld416/PytorchSim-S

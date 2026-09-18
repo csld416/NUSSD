@@ -1,0 +1,6 @@
+graph line_2_pcie
+{
+    edge[weight=40]
+    node[pipeline_stage_delay=1]
+    0--1
+}

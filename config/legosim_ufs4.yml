@@ -1,0 +1,77 @@
+# UFS 4.0-equivalent LegoSim harness for the SimpleSSD active simlet.
+#
+# Important: this is the external LegoSim/PopNet host-to-SSD link model.
+# SimpleSSD itself still runs through Interface = 0 in SimpleSSD-Standalone/config/sample.cfg;
+# do not switch that to Interface = 3 unless the LegoSim standalone driver is
+# rewritten around SimpleSSD's native UFS host/device stack.
+#
+# Interconnect modeling assumptions:
+#   - UFS 4.0 uses MIPI M-PHY 5.0 / UniPro 2.0.
+#   - Public device-level maximum line rate is 23.2 Gb/s per lane, two lanes
+#     per device -> 46.4 Gb/s = 5.8 GB/s raw.
+#   - PopNet -F is integer 64-bit words per flit. Use -F 1 = 8 bytes/flit,
+#     then set clock_rate=0.000725 so one PopNet cycle is 1379.31 ps:
+#       8 bytes / 1.37931 ns ~= 5.8 GB/s.
+#   - The topology edge weight is in PopNet cycles. line_2_ufs4.gv uses
+#     weight=5.075 cycles, corresponding to ~7 ns in this clock domain.
+#   - This is a raw-link baseline. It does not fully model UniPro packet
+#     headers, UFS command protocol, link startup, power states, or software
+#     stack latency.
+
+phase1:
+  - cmd: "/home/csld/SIM/PyTorchSim/TOGSim/tests/build/dram_legosim_driver"
+    args: ["4096"]
+    log: "togsim_dram_legosim.log"
+    is_to_stdout: false
+    clock_rate: 1
+
+  - cmd: "/home/csld/SIM/SimpleSSD-Standalone/build/simplessd-legosim"
+    args:
+      - "/home/csld/SIM/SimpleSSD-Standalone/config/sample.cfg"
+      - "/home/csld/SIM/SimpleSSD-Standalone/simplessd/config/sample_nocache.cfg"
+      - "/home/csld/SIM/SimpleSSD-Standalone/build"
+      - "1"
+      - "0"
+      - "0"
+      - "0"
+      - "4096"
+      - "1"
+    log: "simplessd.log"
+    is_to_stdout: false
+    clock_rate: 1
+
+phase2:
+  - cmd: "/home/csld/SIM/LEGOSIM_MICRO/popnet_chiplet/build/popnet"
+    args:
+      - "-A"
+      - "2"
+      - "-c"
+      - "1"
+      - "-V"
+      - "3"
+      - "-B"
+      - "12"
+      - "-O"
+      - "12"
+      - "-F"
+      - "1"
+      - "-L"
+      - "1000"
+      - "-T"
+      - "20000000000"
+      - "-r"
+      - "1"
+      - "-I"
+      - "../bench.txt"
+      - "-G"
+      - "/home/csld/SIM/SimpleSSD-Standalone/topology/line_2_ufs4.gv"
+      - "-R"
+      - "4"
+      - "-D"
+      - "../delayInfo.txt"
+      - "-P"
+    log: "popnet_0.log"
+    is_to_stdout: false
+    # Converts SimpleSSD/interchiplet ps ticks to UFS4 PopNet cycles:
+    # 1 ps * 0.000725 = 0.000725 PopNet cycles.
+    clock_rate: 0.000725

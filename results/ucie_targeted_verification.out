@@ -1,0 +1,14 @@
+start 2026-08-24 09:50:20 cases=6 sequential=true link_speedup=3.66
+run 1/6 cold_ucie_4096_qd8 started_at=2026-08-24 09:50:20
+done cold_ucie_4096_qd8: cycles=361614895 pred_speedup=1.02183394551 meas_speedup=1.00417847832 p_wall_ucie=0.0116200965671 done_at=2026-08-24 09:50:29
+run 2/6 cold_ucie_65536_qd16 started_at=2026-08-24 09:50:29
+done cold_ucie_65536_qd16: cycles=318743001 pred_speedup=2.48717536321 meas_speedup=1.11155068468 p_wall_ucie=0.411849043236 done_at=2026-08-24 09:50:44
+run 3/6 cold_ucie_4194304_qd4 started_at=2026-08-24 09:50:44
+done cold_ucie_4194304_qd4: cycles=4608818989 pred_speedup=2.71719439196 meas_speedup=1.34128352703 p_wall_ucie=0.455042822251 done_at=2026-08-24 12:11:48
+run 4/6 hot_ucie_65536_qd1 started_at=2026-08-24 12:11:48
+done hot_ucie_65536_qd1: cycles=515683251 pred_speedup=1.04243573361 meas_speedup=1.04246211208 p_wall_ucie=0.0159283823628 done_at=2026-08-24 12:11:57
+run 5/6 hot_ucie_16384_qd8 started_at=2026-08-24 12:11:57
+done hot_ucie_16384_qd8: cycles=35917588 pred_speedup=2.7111400213 meas_speedup=1.16373593906 p_wall_ucie=0.459106552478 done_at=2026-08-24 12:12:05
+run 6/6 hot_ucie_4194304_qd16 started_at=2026-08-24 12:12:05
+done hot_ucie_4194304_qd16: cycles=19447401047 pred_speedup=2.1228084605 meas_speedup=1.11732122943 p_wall_ucie=0.390918302226 done_at=2026-08-24 22:48:33
+finish 2026-08-24 22:48:33 failures=0

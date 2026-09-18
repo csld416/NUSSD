@@ -353,6 +353,15 @@ inline void sendSyncCmd(int __fd, TimeType __cycle) {
     };
 }
 
+inline void sendSyncCmd(int __fd, TimeType __cycle, long __desc) {
+    std::stringstream ss;
+    ss << NSINTERCHIPLET_CMD_HEAD << " SYNC " << __cycle << " " << __desc << std::endl;
+    if (write(__fd, ss.str().c_str(), ss.str().size()) < 0) {
+        perror("write");
+        exit(EXIT_FAILURE);
+    };
+}
+
 /**
  * @brief Send RESULT command.
  */

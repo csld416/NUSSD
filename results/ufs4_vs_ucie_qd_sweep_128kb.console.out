@@ -1,0 +1,32 @@
+run_root=/home/csld/SIM/ufs4_vs_ucie_qd_sweep_128kb
+csv=/home/csld/SIM/results/ufs4_vs_ucie_qd_sweep_128kb.csv
+sizes=131072
+qds=1,2,4,8,16,32,64,128
+modes=cold
+variants=ufs4,ucie
+cases=16 sequential=true
+run 1/16 cold_ufs4_131072_qd1
+done cold_ufs4_131072_qd1: cycles=95311226 link_occupied=22637241.379310 p_wall=0.237508657997 link_sum/request=0.237508657997 done_at=2026-09-09 20:32:57
+run 2/16 cold_ucie_131072_qd1
+done cold_ucie_131072_qd1: cycles=74743986 link_occupied=2070000.000000 p_wall=0.027694535852 link_sum/request=0.027694535852 done_at=2026-09-09 20:33:06
+run 3/16 cold_ufs4_131072_qd2
+done cold_ufs4_131072_qd2: cycles=120523641 link_occupied=45262068.965517 p_wall=0.375545151059 link_sum/request=0.375831258899 done_at=2026-09-09 20:33:16
+run 4/16 cold_ucie_131072_qd2
+done cold_ucie_131072_qd2: cycles=99945987 link_occupied=4131000.000000 p_wall=0.0413323248286 link_sum/request=0.0414523896792 done_at=2026-09-09 20:33:25
+run 5/16 cold_ufs4_131072_qd4
+done cold_ufs4_131072_qd4: cycles=170948470 link_occupied=90511724.137931 p_wall=0.529467880806 link_sum/request=0.530290875333 done_at=2026-09-09 20:33:35
+run 6/16 cold_ucie_131072_qd4
+done cold_ucie_131072_qd4: cycles=150349989 link_occupied=8253000.000000 p_wall=0.054891922872 link_sum/request=0.0551513176366 done_at=2026-09-09 20:33:45
+run 7/16 cold_ufs4_131072_qd8
+done cold_ufs4_131072_qd8: cycles=271798130 link_occupied=181011034.482759 p_wall=0.665976011251 link_sum/request=0.6678333735 done_at=2026-09-09 20:33:55
+run 8/16 cold_ucie_131072_qd8
+done cold_ucie_131072_qd8: cycles=251157993 link_occupied=16497000.000000 p_wall=0.0656837546874 link_sum/request=0.0661734862645 done_at=2026-09-09 20:34:05
+run 9/16 cold_ufs4_131072_qd16
+done cold_ufs4_131072_qd16: cycles=473497448 link_occupied=362009655.172414 p_wall=0.764544047072 link_sum/request=0.768418371562 done_at=2026-09-09 20:34:15
+run 10/16 cold_ucie_131072_qd16
+done cold_ucie_131072_qd16: cycles=452775001 link_occupied=32986000.000000 p_wall=0.0728529621272 link_sum/request=0.0737010654879 done_at=2026-09-09 20:34:21
+run 11/16 cold_ufs4_131072_qd32
+done cold_ufs4_131072_qd32: cycles=876898843 link_occupied=724009655.172414 p_wall=0.825647862296 link_sum/request=0.833419764914 done_at=2026-09-09 20:34:33
+run 12/16 cold_ucie_131072_qd32
+done cold_ucie_131072_qd32: cycles=856010017 link_occupied=65965000.000000 p_wall=0.0770610141119 link_sum/request=0.0785715104546 done_at=2026-09-09 20:34:39
+run 13/16 cold_ufs4_131072_qd64

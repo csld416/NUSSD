@@ -1,0 +1,126 @@
+start 2026-08-21 20:56:24 cases=72 sequential=true
+run 1/72 cold_pcie_4096_qd1 started_at=2026-08-21 20:56:24
+done cold_pcie_4096_qd1: cycles=50824986 link_occupied=1951000.000000 p_wall=0.0383866313313 link_sum/request=0.0383866313313 done_at=2026-08-21 20:56:31
+run 2/72 cold_pcie_4096_qd2 started_at=2026-08-21 20:56:31
+done cold_pcie_4096_qd2: cycles=95173973 link_occupied=2932000.000000 p_wall=0.0308067416709 link_sum/request=0.0410721532031 done_at=2026-08-21 20:56:39
+run 3/72 cold_pcie_4096_qd4 started_at=2026-08-21 20:56:39
+done cold_pcie_4096_qd4: cycles=184797947 link_occupied=5820000.000000 p_wall=0.0314938563684 link_sum/request=0.0474680598048 done_at=2026-08-21 20:56:47
+run 4/72 cold_pcie_4096_qd8 started_at=2026-08-21 20:56:47
+done cold_pcie_4096_qd8: cycles=363125895 link_occupied=10676000.000000 p_wall=0.0294002717708 link_sum/request=0.0612845305345 done_at=2026-08-21 20:56:56
+run 5/72 cold_pcie_4096_qd16 started_at=2026-08-21 20:56:56
+done cold_pcie_4096_qd16: cycles=377891903 link_occupied=21310000.000000 p_wall=0.0563917877859 link_sum/request=0.170167710632 done_at=2026-08-21 20:57:04
+run 6/72 cold_pcie_4096_qd32 started_at=2026-08-21 20:57:04
+start 2026-08-21 21:10:55 cases=60 sequential=true
+run 6/60 cold_pcie_16384_qd1 started_at=2026-08-21 21:10:55
+done cold_pcie_16384_qd1: cycles=58556986 link_occupied=7583000.000000 p_wall=0.129497785286 link_sum/request=0.129497785286 done_at=2026-08-21 21:11:02
+run 7/60 cold_pcie_16384_qd2 started_at=2026-08-21 21:11:02
+done cold_pcie_16384_qd2: cycles=102907973 link_occupied=11382000.000000 p_wall=0.110603674994 link_sum/request=0.147500718919 done_at=2026-08-21 21:11:10
+run 8/60 cold_pcie_16384_qd4 started_at=2026-08-21 21:11:10
+done cold_pcie_16384_qd4: cycles=113662975 link_occupied=22721000.000000 p_wall=0.199897987889 link_sum/request=0.300194500452 done_at=2026-08-21 21:11:19
+run 9/60 cold_pcie_16384_qd8 started_at=2026-08-21 21:11:19
+done cold_pcie_16384_qd8: cycles=131439979 link_occupied=41666000.000000 p_wall=0.31699639879 link_sum/request=0.66220339247 done_at=2026-08-21 21:11:27
+run 10/60 cold_pcie_16384_qd16 started_at=2026-08-21 21:11:27
+done cold_pcie_16384_qd16: cycles=170690987 link_occupied=77700000.000000 p_wall=0.45520856939 link_sum/request=1.48225752541 done_at=2026-08-21 21:11:35
+run 11/60 cold_pcie_65536_qd1 started_at=2026-08-21 21:11:35
+done cold_pcie_65536_qd1: cycles=90184986 link_occupied=30111000.000000 p_wall=0.333880408874 link_sum/request=0.333880408874 done_at=2026-08-21 21:11:43
+run 12/60 cold_pcie_65536_qd2 started_at=2026-08-21 21:11:43
+done cold_pcie_65536_qd2: cycles=102799987 link_occupied=42729000.000000 p_wall=0.415651803536 link_sum/request=0.586070113024 done_at=2026-08-21 21:11:53
+run 13/60 cold_pcie_65536_qd4 started_at=2026-08-21 21:11:53
+done cold_pcie_65536_qd4: cycles=143004989 link_occupied=85399000.000000 p_wall=0.597174969889 link_sum/request=0.947540368679 done_at=2026-08-21 21:12:03
+run 14/60 cold_pcie_65536_qd8 started_at=2026-08-21 21:12:03
+done cold_pcie_65536_qd8: cycles=208465993 link_occupied=153342000.000000 p_wall=0.735573211694 link_sum/request=1.6605825968 done_at=2026-08-21 21:12:15
+run 15/60 cold_pcie_65536_qd16 started_at=2026-08-21 21:12:15
+done cold_pcie_65536_qd16: cycles=354299001 link_occupied=291491001.000000 p_wall=0.822726003114 link_sum/request=2.84420785031 done_at=2026-08-21 21:12:30
+run 16/60 cold_pcie_262144_qd1 started_at=2026-08-21 21:12:30
+done cold_pcie_262144_qd1: cycles=218096986 link_occupied=120223000.000000 p_wall=0.551236411859 link_sum/request=0.551236411859 done_at=2026-08-21 21:12:44
+run 17/60 cold_pcie_262144_qd2 started_at=2026-08-21 21:12:44
+done cold_pcie_262144_qd2: cycles=268515987 link_occupied=170654000.000000 p_wall=0.635545026226 link_sum/request=0.895563063811 done_at=2026-08-21 21:13:04
+run 18/60 cold_pcie_262144_qd4 started_at=2026-08-21 21:13:04
+done cold_pcie_262144_qd4: cycles=429379989 link_occupied=341237000.000000 p_wall=0.794720314737 link_sum/request=1.25999118231 done_at=2026-08-21 21:13:45
+run 19/60 cold_pcie_262144_qd8 started_at=2026-08-21 21:13:45
+done cold_pcie_262144_qd8: cycles=691067993 link_occupied=590382000.000000 p_wall=0.854303781943 link_sum/request=2.00046162462 done_at=2026-08-21 21:14:47
+run 20/60 cold_pcie_262144_qd16 started_at=2026-08-21 21:14:47
+done cold_pcie_262144_qd16: cycles=1299872001 link_occupied=1074254001.000000 p_wall=0.826430602531 link_sum/request=3.09977905278 done_at=2026-08-21 21:17:02
+run 21/60 cold_pcie_1048576_qd1 started_at=2026-08-21 21:17:02
+done cold_pcie_1048576_qd1: cycles=729744986 link_occupied=480671000.000000 p_wall=0.658683525371 link_sum/request=0.658683525371 done_at=2026-08-21 21:18:47
+run 22/60 cold_pcie_1048576_qd2 started_at=2026-08-21 21:18:47
+done cold_pcie_1048576_qd2: cycles=931357987 link_occupied=682287000.000000 p_wall=0.732572232722 link_sum/request=1.03222607571 done_at=2026-08-21 21:22:04
+run 23/60 cold_pcie_1048576_qd4 started_at=2026-08-21 21:22:04
+done cold_pcie_1048576_qd4: cycles=1599843989 link_occupied=1389526000.000000 p_wall=0.868538438469 link_sum/request=1.35201995624 done_at=2026-08-21 21:30:02
+run 24/60 cold_pcie_1048576_qd8 started_at=2026-08-21 21:30:02
+done cold_pcie_1048576_qd8: cycles=2646575993 link_occupied=2217908993.000000 p_wall=0.838029589502 link_sum/request=2.08866059944 done_at=2026-08-21 21:45:18
+run 25/60 cold_pcie_1048576_qd16 started_at=2026-08-21 21:45:18
+done cold_pcie_1048576_qd16: cycles=4981314001 link_occupied=4172676001.000000 p_wall=0.837665724378 link_sum/request=3.23462142655 done_at=2026-08-21 22:16:36
+run 26/60 cold_pcie_4194304_qd1 started_at=2026-08-21 22:16:36
+done cold_pcie_4194304_qd1: cycles=2801336986 link_occupied=1922463000.000000 p_wall=0.686266239873 link_sum/request=0.686266239873 done_at=2026-08-21 22:38:22
+run 27/60 cold_pcie_4194304_qd2 started_at=2026-08-21 22:38:22
+done cold_pcie_4194304_qd2: cycles=3608670987 link_occupied=2729829987.000000 p_wall=0.756464082438 link_sum/request=1.06597803287 done_at=2026-08-21 23:23:04
+run 28/60 cold_pcie_4194304_qd4 started_at=2026-08-21 23:23:04
+done cold_pcie_4194304_qd4: cycles=6181732989 link_occupied=5375370989.000000 p_wall=0.869557290579 link_sum/request=1.39945999211 done_at=2026-08-22 01:22:01
+run 29/60 cold_pcie_4194304_qd8 started_at=2026-08-22 01:22:01
+done cold_pcie_4194304_qd8: cycles=10368523993 link_occupied=8752840993.000000 p_wall=0.844174252662 link_sum/request=2.13225768826 done_at=2026-08-22 05:15:56
+run 30/60 cold_pcie_4194304_qd16 started_at=2026-08-22 05:15:56
+done cold_pcie_4194304_qd16: cycles=19709496001 link_occupied=16474884001.000000 p_wall=0.835885605607 link_sum/request=3.27076658869 done_at=2026-08-22 14:42:05
+run 31/60 hot_pcie_4096_qd1 started_at=2026-08-22 14:42:05
+done hot_pcie_4096_qd1: cycles=6923581 link_occupied=1951000.000000 p_wall=0.281790593625 link_sum/request=0.281790593625 done_at=2026-08-22 14:42:13
+run 32/60 hot_pcie_4096_qd2 started_at=2026-08-22 14:42:13
+done hot_pcie_4096_qd2: cycles=8421082 link_occupied=2932000.000000 p_wall=0.348173785744 link_sum/request=0.46419213113 done_at=2026-08-22 14:42:21
+run 33/60 hot_pcie_4096_qd4 started_at=2026-08-22 14:42:21
+done hot_pcie_4096_qd4: cycles=12342084 link_occupied=5820000.000000 p_wall=0.471557315604 link_sum/request=0.710738964343 done_at=2026-08-22 14:42:29
+run 34/60 hot_pcie_4096_qd8 started_at=2026-08-22 14:42:29
+start 2026-08-22 16:00:25 cases=60 sequential=true
+run 34/60 hot_pcie_4096_qd8 started_at=2026-08-22 16:00:25
+done hot_pcie_4096_qd8: cycles=19264088 link_occupied=10676000.000000 p_wall=0.554191820552 link_sum/request=1.15520651691 done_at=2026-08-22 16:00:33
+run 35/60 hot_pcie_4096_qd16 started_at=2026-08-22 16:00:33
+done hot_pcie_4096_qd16: cycles=34030096 link_occupied=21310000.000000 p_wall=0.626210399171 link_sum/request=1.88965085494 done_at=2026-08-22 16:00:41
+run 36/60 hot_pcie_16384_qd1 started_at=2026-08-22 16:00:41
+done hot_pcie_16384_qd1: cycles=14655581 link_occupied=7583000.000000 p_wall=0.517413809797 link_sum/request=0.517413809797 done_at=2026-08-22 16:00:48
+run 37/60 hot_pcie_16384_qd2 started_at=2026-08-22 16:00:48
+done hot_pcie_16384_qd2: cycles=17462582 link_occupied=10392000.000000 p_wall=0.595100999383 link_sum/request=0.869229991304 done_at=2026-08-22 16:00:56
+run 38/60 hot_pcie_16384_qd4 started_at=2026-08-22 16:00:56
+done hot_pcie_16384_qd4: cycles=26817584 link_occupied=20753584.000000 p_wall=0.773879705196 link_sum/request=1.27248599277 done_at=2026-08-22 16:01:04
+run 39/60 hot_pcie_16384_qd8 started_at=2026-08-22 16:01:04
+done hot_pcie_16384_qd8: cycles=41798588 link_occupied=36299000.000000 p_wall=0.868426464549 link_sum/request=2.0829650992 done_at=2026-08-22 16:01:13
+run 40/60 hot_pcie_16384_qd16 started_at=2026-08-22 16:01:13
+done hot_pcie_16384_qd16: cycles=75494596 link_occupied=64045596.000000 p_wall=0.848346761138 link_sum/request=3.35553818978 done_at=2026-08-22 16:01:21
+run 41/60 hot_pcie_65536_qd1 started_at=2026-08-22 16:01:21
+done hot_pcie_65536_qd1: cycles=537580251 link_occupied=30111000.000000 p_wall=0.0560121022749 link_sum/request=0.0560121022749 done_at=2026-08-22 16:01:29
+run 42/60 hot_pcie_65536_qd2 started_at=2026-08-22 16:01:29
+done hot_pcie_65536_qd2: cycles=537593252 link_occupied=45180000.000000 p_wall=0.084041233464 link_sum/request=0.112066138806 done_at=2026-08-22 16:01:37
+run 43/60 hot_pcie_65536_qd4 started_at=2026-08-22 16:01:37
+done hot_pcie_65536_qd4: cycles=552600254 link_occupied=90299000.000000 p_wall=0.16340745294 link_sum/request=0.245179040399 done_at=2026-08-22 16:01:48
+run 44/60 hot_pcie_65536_qd8 started_at=2026-08-22 16:01:48
+done hot_pcie_65536_qd8: cycles=567663258 link_occupied=165586000.000000 p_wall=0.291697582442 link_sum/request=0.609785810728 done_at=2026-08-22 16:02:00
+run 45/60 hot_pcie_65536_qd16 started_at=2026-08-22 16:02:00
+done hot_pcie_65536_qd16: cycles=612694266 link_occupied=331065000.000000 p_wall=0.540342905706 link_sum/request=1.64464898061 done_at=2026-08-22 16:02:15
+run 46/60 hot_pcie_262144_qd1 started_at=2026-08-22 16:02:15
+done hot_pcie_262144_qd1: cycles=627692251 link_occupied=120223000.000000 p_wall=0.191531757495 link_sum/request=0.191531757495 done_at=2026-08-22 16:02:29
+run 47/60 hot_pcie_262144_qd2 started_at=2026-08-22 16:02:29
+done hot_pcie_262144_qd2: cycles=627711252 link_occupied=180354000.000000 p_wall=0.287320004899 link_sum/request=0.383094932955 done_at=2026-08-22 16:02:50
+run 48/60 hot_pcie_262144_qd4 started_at=2026-08-22 16:02:50
+done hot_pcie_262144_qd4: cycles=687775254 link_occupied=360642000.000000 p_wall=0.524360243993 link_sum/request=0.786589800743 done_at=2026-08-22 16:03:30
+run 49/60 hot_pcie_262144_qd8 started_at=2026-08-22 16:03:30
+done hot_pcie_262144_qd8: cycles=747863258 link_occupied=626968258.000000 p_wall=0.838346116477 link_sum/request=1.84845155209 done_at=2026-08-22 16:04:34
+run 50/60 hot_pcie_262144_qd16 started_at=2026-08-22 16:04:34
+done hot_pcie_262144_qd16: cycles=1751304517 link_occupied=1038564517.000000 p_wall=0.593023375957 link_sum/request=2.30269148561 done_at=2026-08-22 16:06:48
+run 51/60 hot_pcie_1048576_qd1 started_at=2026-08-22 16:06:48
+done hot_pcie_1048576_qd1: cycles=976019250 link_occupied=480671000.000000 p_wall=0.492481065307 link_sum/request=0.492481065307 done_at=2026-08-22 16:08:30
+run 52/60 hot_pcie_1048576_qd2 started_at=2026-08-22 16:08:30
+done hot_pcie_1048576_qd2: cycles=988153252 link_occupied=708902000.000000 p_wall=0.71740086729 link_sum/request=0.972892613625 done_at=2026-08-22 16:11:49
+run 53/60 hot_pcie_1048576_qd4 started_at=2026-08-22 16:11:49
+done hot_pcie_1048576_qd4: cycles=2076362505 link_occupied=1324026000.000000 p_wall=0.637666109271 link_sum/request=1.0417511368 done_at=2026-08-22 16:19:50
+run 54/60 hot_pcie_1048576_qd8 started_at=2026-08-22 16:19:50
+done hot_pcie_1048576_qd8: cycles=3212490011 link_occupied=2088718011.000000 p_wall=0.650186616565 link_sum/request=1.72071881347 done_at=2026-08-22 16:35:21
+run 55/60 hot_pcie_1048576_qd16 started_at=2026-08-22 16:35:21
+done hot_pcie_1048576_qd16: cycles=5727462023 link_occupied=4024305023.000000 p_wall=0.702633209411 link_sum/request=2.8156628425 done_at=2026-08-22 17:10:43
+run 56/60 hot_pcie_4194304_qd1 started_at=2026-08-22 17:10:43
+done hot_pcie_4194304_qd1: cycles=3225259501 link_occupied=1922463000.000000 p_wall=0.596064595548 link_sum/request=0.596064595548 done_at=2026-08-22 17:32:30
+run 57/60 hot_pcie_4194304_qd2 started_at=2026-08-22 17:32:30
+done hot_pcie_4194304_qd2: cycles=4195683005 link_occupied=2884627005.000000 p_wall=0.687522627797 link_sum/request=0.916837615095 done_at=2026-08-22 18:19:30
+run 58/60 hot_pcie_4194304_qd4 started_at=2026-08-22 18:19:30
+done hot_pcie_4194304_qd4: cycles=6972889011 link_occupied=5164227011.000000 p_wall=0.740615117042 link_sum/request=1.2406747026 done_at=2026-08-22 20:18:09
+run 59/60 hot_pcie_4194304_qd8 started_at=2026-08-22 20:18:09
+done hot_pcie_4194304_qd8: cycles=11567914023 link_occupied=8389683023.000000 p_wall=0.725254614299 link_sum/request=1.91121536312 done_at=2026-08-23 00:00:16
+run 60/60 hot_pcie_4194304_qd16 started_at=2026-08-23 00:00:16
+done hot_pcie_4194304_qd16: cycles=21728994047 link_occupied=15813716047.000000 p_wall=0.727770278403 link_sum/request=2.96845136321 done_at=2026-08-23 10:04:00
+finish 2026-08-23 10:04:00 failures=0
