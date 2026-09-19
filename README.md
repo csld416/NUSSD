@@ -19,7 +19,7 @@ Build system → characterize bottlenecks → verify bottlenecks → explain LLM
 Architecture 1 — NPU → SSD via UCIe
 
 My responsibility
-
+```txt
             UCIe
 ┌─────┐  ─────────►  ┌────────────── SSD ──────────────┐
 │ NPU │              │                                  │
@@ -30,7 +30,7 @@ My responsibility
                      │     ├── ...                      │
                      │     └── Flash Channel N ── NAND  │
                      └──────────────────────────────────┘
-
+```
 The NPU accesses the entire SSD through a single external UCIe link.
 
 Potential bottlenecks include:
@@ -44,14 +44,14 @@ Potential bottlenecks include:
 Architecture 2 — NPU → Flash Channels via UCIe
 
 Sammy’s responsibility
-
+```text
                      ┌── UCIe ── Flash Channel 0
                      │
 ┌─────┐              ├── UCIe ── Flash Channel 1
 │ NPU │──────────────┼── ...
 └─────┘              │
                      └── UCIe ── Flash Channel N
-
+```
 The SSD-level shared path is flattened.
 
 N flash channels → N UCIe links.
