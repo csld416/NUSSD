@@ -1,6 +1,6 @@
-LLM Inference Bottleneck Analysis on UCIe-Connected Flash Systems
+# LLM Inference Bottleneck Analysis on UCIe-Connected Flash Systems
 
-1. End Goal
+## 1. End Goal
 
 Evaluate LLM inference workloads — including dense, sparse, and MoE models — on two NPU–Flash architectures, identify where and why each stage becomes bottlenecked, and use those results to determine what architectural changes are actually necessary.
 
@@ -14,7 +14,7 @@ Build system → characterize bottlenecks → verify bottlenecks → explain LLM
 
 ⸻
 
-2. Target Architectures
+## 2. Target Architectures
 
 Architecture 1 — NPU → SSD via UCIe
 
@@ -60,7 +60,7 @@ This architecture is important because it provides an alternative when Architect
 
 ⸻
 
-3. Why Running the LLM Alone Is Not Enough
+## 3. Why Running the LLM Alone Is Not Enough
 
 Suppose we run an LLM and observe that one operation is slow.
 
@@ -77,7 +77,7 @@ We first need controlled microbenchmarks that deliberately stress individual par
 
 ⸻
 
-4. Phase I — Build the Simulation Platform
+## 4. Phase I — Build the Simulation Platform
 
 Objective
 
@@ -120,7 +120,7 @@ with measurable latency/bandwidth/utilization at each boundary.
 
 ⸻
 
-5. Phase II — Bottleneck Characterization
+## 5. Phase II — Bottleneck Characterization
 
 Before running full LLM workloads, construct controlled test cases that deliberately create known bottlenecks.
 
@@ -160,7 +160,7 @@ Neither additional UCIe bandwidth nor additional channel bandwidth significantly
 
 ⸻
 
-6. Phase III — Run LLM Workloads
+## 6. Phase III — Run LLM Workloads
 
 After establishing the bottleneck signatures, run:
 
@@ -172,6 +172,7 @@ Break inference into meaningful operation/stages rather than reporting only end-
 
 For each operation, determine:
 
+```text
 LLM Operation
       │
       ▼
@@ -180,6 +181,7 @@ Where is time spent?
       ├── NPU ↔ SSD UCIe
       ├── SSD ↔ Flash channels
       └── NAND tR
+```
 
 The output should therefore look conceptually like:
 
@@ -192,7 +194,7 @@ The important point is that bottleneck identification is supported by previously
 
 ⸻
 
-7. Phase IV — Verify and Explain
+## 7. Phase IV — Verify and Explain
 
 For every identified LLM bottleneck, answer two separate questions:
 
@@ -202,11 +204,13 @@ Verify it by changing the corresponding resource.
 
 For example:
 
+```text
 Suspect UCIe bottleneck
         ↓
 Increase UCIe bandwidth
         ↓
 Does operation latency decrease?
+```
 
 If yes, the causal relationship is strengthened.
 
@@ -227,7 +231,7 @@ Observation → Controlled verification → Architectural explanation
 
 ⸻
 
-8. Phase V — Solve the Bottleneck
+## 8. Phase V — Solve the Bottleneck
 
 Once the bottleneck is identified and verified, determine which architectural change addresses it.
 
@@ -235,20 +239,24 @@ Case 1 — Shared UCIe / SSD Path Is the Bottleneck
 
 If Architecture 1 remains communication-bound even with UCIe:
 
+```text
 NPU
  │
  UCIe   ← bottleneck
  │
 SSD
+```
 
 then simply replacing the existing external interface with UCIe is insufficient.
 
 This motivates evaluating Architecture 2:
 
+```text
               ┌─ UCIe → Channel 0
 NPU ──────────┼─ UCIe → Channel 1
               ├─ ...
               └─ UCIe → Channel N
+```
 
 The question becomes:
 
@@ -260,9 +268,11 @@ Case 2 — Flash Channel / NAND Becomes the Bottleneck
 
 If communication is no longer dominant and the bottleneck moves into Flash:
 
+```text
 NPU ── UCIe ── SSD ── Flash
                          ↑
                      bottleneck
+```                    
 
 then additional host-side bandwidth provides diminishing benefit.
 
@@ -270,8 +280,9 @@ This motivates in-Flash / near-Flash processing techniques to reduce data moveme
 
 ⸻
 
-9. Overall Experimental Logic
+## 9. Overall Experimental Logic
 
+```text
 [1] Build Simulator
         │
         ▼
@@ -311,7 +322,7 @@ Dense / Sparse / MoE
         │
         └── Flash bottleneck
                 → Flash processing
-
+```
 ⸻
 
 Current Status
