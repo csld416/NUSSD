@@ -1,4 +1,11 @@
 # Project Log (Rule: the more recent, the more on file top)
+
+## 2026-09-19: Runtime SimpleSSD IPC
+
+- Added `protocol/ssd_ipc_protocol.h` for versioned logical-storage requests and completions.
+- Modified `SimpleSSD-Standalone/sim/legosim_main.cc` for blocking runtime IPC and persistent QD1 BIO execution.
+- Modified `SimpleSSD-Standalone/CMakeLists.txt` for the shared protocol and LegoSim IPC dependencies.
+
 ## 2026-09-18
 Updated README for more comprehensive goal structure.
 

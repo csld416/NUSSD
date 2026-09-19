@@ -22,6 +22,15 @@ project(simplessd-standalone)
 # Add options for debug build
 option(DEBUG_BUILD "Build SimpleSSD-Standalone in debug mode." OFF)
 
+# LegoSim and the shared NUSSD IPC protocol are sibling components in the
+# unified repository. SIMULATOR_ROOT remains available for relocated builds.
+if (DEFINED ENV{SIMULATOR_ROOT})
+  set(LEGOSIM_ROOT "$ENV{SIMULATOR_ROOT}")
+else ()
+  set(LEGOSIM_ROOT "${PROJECT_SOURCE_DIR}/../LEGOSIM_MICRO")
+endif ()
+set(NUSSD_PROTOCOL_DIR "${PROJECT_SOURCE_DIR}/../protocol")
+
 # Set DRAMPower path
 set(DRAMPOWER_SOURCE_DIR
   "${PROJECT_SOURCE_DIR}/lib/drampower/src"
@@ -172,4 +181,12 @@ add_executable(simplessd-legosim
   ${SRC_SIM_LEGOSIM}
   ${SRC_UTIL}
 )
-target_link_libraries(simplessd-legosim simplessd)
+target_include_directories(simplessd-legosim PRIVATE
+  ${LEGOSIM_ROOT}/interchiplet/includes
+  ${NUSSD_PROTOCOL_DIR}
+)
+target_link_libraries(simplessd-legosim
+  simplessd
+  ${LEGOSIM_ROOT}/interchiplet/lib/libinterchiplet_c.a
+  pthread
+)

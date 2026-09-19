@@ -6,20 +6,24 @@
  */
 
 #include <cerrno>
+#include <cmath>
 #include <cinttypes>
 #include <cstdlib>
 #include <algorithm>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "bil/entry.hh"
+#include "pipe_comm.h"
 #include "sil/none/none.hh"
 #include "sim/cfg_reader.hh"
 #include "sim/engine.hh"
 #include "simplessd/util/simplessd.hh"
+#include "ssd_ipc_protocol.h"
 
 namespace {
 
@@ -97,6 +101,7 @@ struct Options {
   double clockRate;
   uint64_t startOffset;
   StorageOp op;
+  bool runtimeIpc;
 
   Options()
       : ssdX(1),
@@ -107,7 +112,8 @@ struct Options {
         iterations(1),
         clockRate(1.0),
         startOffset(0),
-        op(OP_READ) {}
+        op(OP_READ),
+        runtimeIpc(false) {}
 };
 
 bool parseUint64(const char *text, uint64_t &value) {
@@ -169,18 +175,49 @@ void printUsage() {
       << "Usage: simplessd-legosim <Simulation configuration file> "
          "<SimpleSSD configuration file> <Output directory> "
          "[ssd_x] [ssd_y] [npu_x] [npu_y] [request_bytes] [iterations] "
-         "[clock_rate] [start_offset] [read|write]"
+         "[clock_rate] [start_offset] [read|write]\n"
+         "   or: simplessd-legosim <Simulation configuration file> "
+         "<SimpleSSD configuration file> <Output directory> --runtime-ipc "
+         "[ssd_x] [ssd_y] [npu_x] [npu_y] [clock_rate]"
       << std::endl;
 }
 
 bool parseOptions(int argc, char *argv[], Options &options) {
-  if (argc < 4 || argc > 13) {
+  if (argc < 4) {
     return false;
   }
 
   options.simConfig = argv[1];
   options.ssdConfig = argv[2];
   options.outputDir = argv[3];
+
+  if (argc >= 5 && std::string(argv[4]) == "--runtime-ipc") {
+    if (argc > 10) {
+      return false;
+    }
+
+    options.runtimeIpc = true;
+    if (argc >= 6 && !parseLong(argv[5], options.ssdX)) {
+      return false;
+    }
+    if (argc >= 7 && !parseLong(argv[6], options.ssdY)) {
+      return false;
+    }
+    if (argc >= 8 && !parseLong(argv[7], options.npuX)) {
+      return false;
+    }
+    if (argc >= 9 && !parseLong(argv[8], options.npuY)) {
+      return false;
+    }
+    if (argc >= 10 && !parseDouble(argv[9], options.clockRate)) {
+      return false;
+    }
+    return true;
+  }
+
+  if (argc > 13) {
+    return false;
+  }
 
   if (argc >= 5 && !parseLong(argv[4], options.ssdX)) {
     return false;
@@ -211,6 +248,70 @@ bool parseOptions(int argc, char *argv[], Options &options) {
   }
 
   return options.requestBytes > 0 && options.iterations > 0;
+}
+
+uint64_t requestWireBytes(const NUSSD::SsdIpcRequest &request) {
+  return request.operation == NUSSD::SsdIpcOperation::Write
+             ? request.length_bytes
+             : NUSSD::kSsdReadCommandBytes;
+}
+
+uint64_t responseWireBytes(const NUSSD::SsdIpcRequest &request) {
+  return request.operation == NUSSD::SsdIpcOperation::Read
+             ? request.length_bytes
+             : NUSSD::kSsdReadCommandBytes;
+}
+
+bool requestToBioType(const NUSSD::SsdIpcRequest &request,
+                      BIL::BIO_TYPE &type) {
+  switch (request.operation) {
+    case NUSSD::SsdIpcOperation::Read:
+      type = BIL::BIO_READ;
+      return true;
+    case NUSSD::SsdIpcOperation::Write:
+      type = BIL::BIO_WRITE;
+      return true;
+    case NUSSD::SsdIpcOperation::Flush:
+      type = BIL::BIO_FLUSH;
+      return true;
+    case NUSSD::SsdIpcOperation::Trim:
+      type = BIL::BIO_TRIM;
+      return true;
+    case NUSSD::SsdIpcOperation::Shutdown:
+      return false;
+  }
+
+  return false;
+}
+
+NUSSD::SsdIpcStatus validateRuntimeRequest(
+    const NUSSD::SsdIpcRequest &request, uint64_t capacity) {
+  if (!NUSSD::hasValidHeader(request) || request.flags != 0 ||
+      request.request_id == NUSSD::kInvalidSsdRequestId ||
+      request.request_id >
+          static_cast<uint64_t>(std::numeric_limits<long>::max())) {
+    return NUSSD::SsdIpcStatus::InvalidProtocol;
+  }
+
+  if (request.operation == NUSSD::SsdIpcOperation::Shutdown) {
+    return NUSSD::SsdIpcStatus::Success;
+  }
+
+  BIL::BIO_TYPE ignored;
+  if (!requestToBioType(request, ignored)) {
+    return NUSSD::SsdIpcStatus::InvalidOperation;
+  }
+
+  if (request.operation == NUSSD::SsdIpcOperation::Flush) {
+    return NUSSD::SsdIpcStatus::Success;
+  }
+
+  if (request.length_bytes == 0 || request.offset_bytes >= capacity ||
+      request.length_bytes > capacity - request.offset_bytes) {
+    return NUSSD::SsdIpcStatus::InvalidRange;
+  }
+
+  return NUSSD::SsdIpcStatus::Success;
 }
 
 void emitRead(uint64_t cycle, const Options &options, uint64_t bytes,
@@ -289,6 +390,159 @@ bool waitForSync(SyncResponse &response) {
   return false;
 }
 
+int runRuntimeIpc(const Options &options, Engine &engine,
+                  BIL::BlockIOEntry &bioEntry, uint64_t capacity,
+                  uint32_t minBlockSize) {
+  InterChiplet::PipeComm pipeComm;
+  uint64_t currentCycle = 1;
+  uint64_t submittedReads = 0;
+  uint64_t submittedWrites = 0;
+  uint64_t bytesRead = 0;
+  uint64_t bytesWritten = 0;
+  uint64_t completedRequests = 0;
+
+  emitResult({"capacity", std::to_string(capacity), "min_io_size",
+              std::to_string(minBlockSize), "runtime_ipc", "1"});
+
+  while (true) {
+    // receiveSync/read_data are blocking operations. While the request queue
+    // is idle, the kernel sleeps this process until the requester and LegoSim
+    // make the FIFO available; there is no polling loop here.
+    std::string requestPipe = InterChiplet::receiveSync(
+        options.npuX, options.npuY, options.ssdX, options.ssdY);
+    NUSSD::SsdIpcRequest request;
+    if (pipeComm.read_data(requestPipe.c_str(), &request, sizeof(request)) !=
+        static_cast<int>(sizeof(request))) {
+      std::cerr << "Failed to receive complete SSD IPC request." << std::endl;
+      return 4;
+    }
+
+    const long desc =
+        request.request_id <=
+                static_cast<uint64_t>(std::numeric_limits<long>::max())
+            ? static_cast<long>(request.request_id)
+            : 0;
+    const uint64_t requestBytes = requestWireBytes(request);
+    if (requestBytes >
+        static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+      std::cerr << "SSD IPC request leg exceeds LegoSim's byte-count range."
+                << std::endl;
+      return 4;
+    }
+
+    const InterChiplet::TimeType arrivalCycle = InterChiplet::readSync(
+        currentCycle, options.npuX, options.npuY, options.ssdX,
+        options.ssdY, static_cast<int>(requestBytes), desc);
+
+    NUSSD::SsdIpcResponse response;
+    response.request_id = request.request_id;
+    response.status = validateRuntimeRequest(request, capacity);
+
+    const bool shutdown =
+        response.status == NUSSD::SsdIpcStatus::Success &&
+        request.operation == NUSSD::SsdIpcOperation::Shutdown;
+
+    if (response.status == NUSSD::SsdIpcStatus::Success && !shutdown) {
+      BIL::BIO_TYPE bioType = BIL::BIO_READ;
+      if (!requestToBioType(request, bioType)) {
+        response.status = NUSSD::SsdIpcStatus::InvalidOperation;
+      }
+      else {
+        bool done = false;
+        SimpleSSD::Event submitEvent = 0;
+        const uint64_t requestedArrivalTick = static_cast<uint64_t>(
+            static_cast<double>(arrivalCycle) * options.clockRate);
+        const uint64_t arrivalTick =
+            std::max(engine.getCurrentTick(), requestedArrivalTick);
+
+        submitEvent = engine.allocateEvent([&](uint64_t) {
+          BIL::BIO bio;
+          response.submitted_tick_ps = engine.getCurrentTick();
+          bio.id = request.request_id;
+          bio.type = bioType;
+          bio.offset = request.offset_bytes;
+          bio.length = request.length_bytes;
+          bio.callback = [&](uint64_t completedID) {
+            if (completedID == request.request_id) {
+              response.completed_tick_ps = engine.getCurrentTick();
+              done = true;
+            }
+          };
+          bioEntry.submitIO(bio);
+        });
+
+        engine.scheduleEvent(submitEvent, arrivalTick);
+        while (!done && engine.doNextEvent()) {
+        }
+        engine.deallocateEvent(submitEvent);
+
+        if (!done) {
+          response.status = NUSSD::SsdIpcStatus::InternalError;
+          response.completed_tick_ps = engine.getCurrentTick();
+        }
+        else {
+          completedRequests++;
+          if (request.operation == NUSSD::SsdIpcOperation::Read) {
+            submittedReads++;
+            bytesRead += request.length_bytes;
+          }
+          else if (request.operation == NUSSD::SsdIpcOperation::Write) {
+            submittedWrites++;
+            bytesWritten += request.length_bytes;
+          }
+        }
+      }
+    }
+
+    uint64_t completionCycle = currentCycle;
+    if (response.completed_tick_ps > 0) {
+      completionCycle = static_cast<uint64_t>(std::ceil(
+          static_cast<double>(response.completed_tick_ps) /
+          options.clockRate));
+    }
+    completionCycle = std::max(completionCycle,
+                               static_cast<uint64_t>(arrivalCycle));
+
+    std::string responsePipe = InterChiplet::sendSync(
+        options.ssdX, options.ssdY, options.npuX, options.npuY);
+    if (pipeComm.write_data(responsePipe.c_str(), &response,
+                            sizeof(response)) !=
+        static_cast<int>(sizeof(response))) {
+      std::cerr << "Failed to send complete SSD IPC response." << std::endl;
+      return 5;
+    }
+
+    const uint64_t responseBytes =
+        response.status == NUSSD::SsdIpcStatus::Success
+            ? responseWireBytes(request)
+            : NUSSD::kSsdReadCommandBytes;
+    if (responseBytes >
+        static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+      std::cerr << "SSD IPC response leg exceeds LegoSim's byte-count range."
+                << std::endl;
+      return 5;
+    }
+
+    const InterChiplet::TimeType returnedCycle = InterChiplet::writeSync(
+        completionCycle, options.ssdX, options.ssdY, options.npuX,
+        options.npuY, static_cast<int>(responseBytes), desc);
+    currentCycle = std::max(completionCycle,
+                            static_cast<uint64_t>(returnedCycle));
+
+    if (shutdown) {
+      break;
+    }
+  }
+
+  emitResult({"reads", std::to_string(submittedReads), "writes",
+              std::to_string(submittedWrites), "bytes_read",
+              std::to_string(bytesRead), "bytes_written",
+              std::to_string(bytesWritten), "completed",
+              std::to_string(completedRequests)});
+  emitCycle(currentCycle);
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char *argv[]) {
@@ -328,6 +582,13 @@ int main(int argc, char *argv[]) {
   uint64_t capacity = 0;
   uint32_t minBlockSize = 0;
   driver.getInfo(capacity, minBlockSize);
+
+  if (options.runtimeIpc) {
+    int status =
+        runRuntimeIpc(options, engine, bioEntry, capacity, minBlockSize);
+    releaseSimpleSSDEngine();
+    return status;
+  }
 
   uint64_t nextID = 1;
   uint64_t submittedReads = 0;
