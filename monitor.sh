@@ -1,5 +1,126 @@
 #!/usr/bin/env bash
 
+monitor_bridge() {
+    local trace_dir="${TRACE_DIR:-${RUN_DIR:-}/live}"
+    local interval="${INTERVAL:-1}"
+    if [ -z "$trace_dir" ] || [ "$trace_dir" = "/live" ]; then
+        echo "Bridge mode requires RUN_DIR=<run.legosim_run> or TRACE_DIR=<run.legosim_run/live>." >&2
+        return 2
+    fi
+
+    while true; do
+        local event_files=()
+        [ -f "$trace_dir/npu.events.tsv" ] && event_files+=("$trace_dir/npu.events.tsv")
+        [ -f "$trace_dir/ssd.events.tsv" ] && event_files+=("$trace_dir/ssd.events.tsv")
+
+        local latest_request=""
+        if [ "${#event_files[@]}" -gt 0 ]; then
+            latest_request="$(
+                awk -F '\t' '
+                    FNR > 1 && $4 != "0" && $5 != "SHUTDOWN" && $1 >= newest {
+                        newest=$1; request=$4
+                    }
+                    END { print request }
+                ' "${event_files[@]}"
+            )"
+        fi
+
+        clear
+        echo "============================================================"
+        echo " NUSSD runtime protocol monitor - $(date '+%Y-%m-%d %H:%M:%S')"
+        echo " Trace directory: $trace_dir"
+        echo "============================================================"
+        echo "[Processes]"
+        for process_spec in \
+            "TOGSim|/Simulator .*--config" \
+            "LegoSim|interchiplet .*legosim.yml" \
+            "SimpleSSD|simplessd-legosim .*--runtime-ipc"; do
+            local label="${process_spec%%|*}"
+            local pattern="${process_spec#*|}"
+            local pid
+            pid="$(pgrep -f "$pattern" | head -n 1)"
+            if [ -n "$pid" ]; then
+                printf "  %-10s RUNNING  pid=%s\n" "$label" "$pid"
+            else
+                printf "  %-10s NOT RUNNING\n" "$label"
+            fi
+        done
+        echo "------------------------------------------------------------"
+
+        echo "[Protocol summary]"
+        if [ "${#event_files[@]}" -eq 0 ]; then
+            echo "  Waiting for trace files. Start the simulation with NUSSD_PROTOCOL_TRACE=1."
+        else
+            awk -F '\t' '
+                FNR > 1 {
+                    if ($3 == "NPU_ISSUE") issued++
+                    if ($3 == "NPU_REQUEST_COMPLETE" && $5 != "SHUTDOWN") completed++
+                    if ($10 != "SUCCESS") errors++
+                }
+                END {
+                    printf "  issued=%d completed=%d in_flight=%d protocol_errors=%d\n",
+                           issued+0, completed+0, issued-completed, errors+0
+                }
+            ' "${event_files[@]}"
+        fi
+        echo "------------------------------------------------------------"
+
+        echo "[Latest storage request]"
+        if [ -z "$latest_request" ]; then
+            echo "  No storage request observed yet."
+        else
+            awk -F '\t' -v id="$latest_request" '
+                FNR > 1 && $4 == id {
+                    if (!shown) {
+                        printf "  id=%s operation=%s offset=%s bytes=%s\n",
+                               $4, $5, $6, $7
+                        shown=1
+                    }
+                    if ($3 == "NPU_ISSUE") issue=$8
+                    if ($3 == "SSD_BIO_SUBMITTED") submit=$9
+                    if ($3 == "SSD_BIO_COMPLETED") finish=$9
+                    if ($3 == "NPU_REQUEST_COMPLETE") complete=$8
+                }
+                END {
+                    if (issue != "") printf "  NPU issue cycle:       %s\n", issue
+                    if (submit != "") printf "  SSD submitted tick:    %s ps\n", submit
+                    if (finish != "") printf "  SSD completed tick:    %s ps\n", finish
+                    if (submit != "" && finish != "")
+                        printf "  SSD service time:      %s ps\n", finish-submit
+                    if (complete != "") printf "  NPU completion cycle:  %s\n", complete
+                    if (issue != "" && complete != "")
+                        printf "  End-to-end cycles:     %s\n", complete-issue
+                }
+            ' "${event_files[@]}"
+        fi
+        echo "------------------------------------------------------------"
+
+        echo "[Recent protocol events]"
+        if [ "${#event_files[@]}" -eq 0 ]; then
+            echo "  No events yet."
+        else
+            {
+                for event_file in "${event_files[@]}"; do
+                    tail -n 20 "$event_file" | awk -F '\t' 'NR > 1 || $1 ~ /^[0-9]+$/ { print }'
+                done
+            } | sort -t $'\t' -k1,1n | tail -n 16 | awk -F '\t' '
+                {
+                    printf "  %-3s %-30s id=%-5s op=%-8s bytes=%-9s cycle=%-10s tick=%-14s %s\n",
+                           $2, $3, $4, $5, $7, $8, $9, $10
+                }
+            '
+        fi
+        echo "============================================================"
+        echo "Refresh: ${interval}s (Ctrl+C to exit)"
+        sleep "$interval"
+    done
+}
+
+if [ "${MONITOR_MODE:-}" = "bridge" ]; then
+    monitor_bridge
+    exit $?
+fi
+
 if [ -z "${CSV_FILE:-}" ]; then
     if [ -f "results/ufs4_vs_ucie_qd_sweep_128kb.csv" ] || [ -f "results/ufs4_vs_ucie_qd_sweep_128kb.out" ]; then
         CSV_FILE="results/ufs4_vs_ucie_qd_sweep_128kb.csv"

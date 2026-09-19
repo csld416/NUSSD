@@ -1,15 +1,28 @@
 # Project Log (Rule: the more recent, the more on file top)
 
-## 2026-09-19: Runtime SimpleSSD IPC
+## 2026-09-19
 
-- Added `protocol/ssd_ipc_protocol.h` for versioned logical-storage requests and completions.
-- Modified `SimpleSSD-Standalone/sim/legosim_main.cc` for blocking runtime IPC and persistent QD1 BIO execution.
-- Modified `SimpleSSD-Standalone/CMakeLists.txt` for the shared protocol and LegoSim IPC dependencies.
+**Runtime SimpleSSD IPC and live observability**
+
+- Initialized this project as "NUSSD" in the public GitHub repository.
+- Added `protocol/ssd_ipc_protocol.h` as the shared TOGSim/SimpleSSD wire contract. The fixed-size, versioned messages carry operation, request ID, logical byte offset, length, completion status, and SimpleSSD service timestamps. FIFO messages carry semantics while LegoSim events carry simulated transfer size and timing.
+- Modified `SimpleSSD-Standalone/sim/legosim_main.cc` to add a persistent `--runtime-ipc` server mode. It blocks on the request FIFO instead of busy-waiting, validates each message, submits a BIO to SimpleSSD, advances the event engine until completion, returns a response, and exits only after a shutdown request. The first implementation is deliberately blocking QD1: one request is completed before the next is accepted.
+- Modified `SimpleSSD-Standalone/CMakeLists.txt` to expose the repository-level protocol header and link the LegoSim IPC support required by the runtime wrapper.
+- Reworked TOGSim's `SsdLegoSimLink` into a client for the shared protocol. Each logical read sends a 64-byte command event toward the SSD, exchanges the 32-byte request/response metadata through `PipeComm`, and models the returned payload as a LegoSim read event. Request IDs are checked end to end, and LegoSim's resolved response-arrival cycle becomes the DMA completion cycle.
+- Modified `TOGSim/src/DMA.cc` so weight DMA reads use the live SSD client when `TOGSIM_SSD_LEGOSIM=1`. Requests claimed by the SSD path are not also sent through the DRAM LegoSim path. Address translation is intentionally temporary: all reads currently use logical SSD offset zero until tensor-to-storage placement metadata is implemented.
+- Updated `Simulator/simulator.py` and `PyTorchSimFrontend/extension_config.py` to launch the real `simplessd-legosim --runtime-ipc` executable as a separate LegoSim phase-1 process, pass its configuration/output paths, and reconcile TOGSim core cycles with the SSD wrapper's nanosecond-facing LegoSim clock. The SSD phase-2 process remains `/bin/true`, so this step establishes real storage-service timing but does not yet add a PopNet SSD-link topology.
+- Verified the bridge with syntax checks, Python bytecode compilation, and a live three-process smoke test using the modified TOGSim SSD client, LegoSim/interchiplet, and SimpleSSD. A 4 KiB runtime read completed successfully, SimpleSSD reported one completed read and 4096 bytes read, and the protocol shutdown/ack path exited cleanly.
+- Deferred follow-up work: implement stable tensor/TOG-address to logical SSD-offset translation, replace the SSD phase-2 placeholder with the desired interconnect model, and extend the blocking QD1 protocol path if concurrent outstanding storage requests are required.
+- Added optional live protocol observability. TOGSim and SimpleSSD now emit separate append-only TSV event streams under `<run_dir>/live`, correlated by request ID and recording protocol stages, request fields, LegoSim cycles, SimpleSSD ticks, and completion status. Extended `monitor.sh` with a bridge mode that reads these files without participating in the simulation. A traced 4 KiB live smoke test completed with matching request data, zero protocol errors, and a clean shutdown.
+- Added `config/nussd_runtime.env` as the sourceable runtime/trace toggle configuration and `USAGE.md` as the human-readable start, monitoring, toggle, expected-output, and current-limitations guide.
 
 ## 2026-09-18
+
 Updated README for more comprehensive goal structure.
 
-## 2026-09-08: Baseline Correction from PCIe to UFS 4.0
+## 2026-09-08
+
+**Baseline Correction from PCIe to UFS 4.0**
 
 The previous baseline was mislabeled as PCIe. The intended baseline is UFS 4.0.
 
@@ -115,7 +128,9 @@ The two link transactions were:
 4KB read response
 ```
 
-## 2026-08-27 - Analytical Model Correction: FTL CPU Cost Does Not Scale With N_LPN(S)
+## 2026-08-27
+
+**Analytical Model Correction: FTL CPU Cost Does Not Scale With N_LPN(S)**
 
 ### What Was Investigated
 
@@ -228,7 +243,7 @@ Both of these need their own trace before `T_mapping_DRAM(S)` and `T_PAL(S)`
 can be trusted at their previously-derived forms for `N_LPN(S) > 1`
 (i.e. `S > 32KB`).
 
-## 2026-08-27 - Read Path: Split Request-Leg Command Size From Response-Leg Data Size
+**Read Path: Split Request-Leg Command Size From Response-Leg Data Size**
 
 ### Motivation
 
@@ -349,7 +364,9 @@ globally linear as the earlier fit implied -- the linear law only holds for
 follow-up if the command-leg latency itself becomes analytically important
 (e.g. once IFP work needs a precise small-command-latency term).
 
-## 2026-08-21: Reverted Channel Count and Switched NAND DMA Speed to ONFI-5.2-Class
+## 2026-08-21
+
+**Reverted Channel Count and Switched NAND DMA Speed to ONFI-5.2-Class**
 
 Stopped the in-progress 42-channel PCIe-only characterization run.
 
@@ -1410,7 +1427,7 @@ replace the serialized SSD-side model with a wave/overlap-aware model or fit
 T_SSD(S) from measured SimpleSSD service time before using it to predict p(S).
 ```
 
-## 2026-08-21: Result Archive, Timescale Fix, and Analytical Model Checkpoint
+**Result Archive, Timescale Fix, and Analytical Model Checkpoint**
 
 ### Archived Stale Results
 
@@ -1537,7 +1554,7 @@ Actions:
 The old partial outputs from that run are archived under
 `results/tmp/pre_timescale_fix_20260821/`.
 
-## 2026-08-21: PCIe-Only Link-Fraction Characterization Started
+**PCIe-Only Link-Fraction Characterization Started**
 
 Postponed direct PCIe-vs-UCIe comparison and started a PCIe-only
 characterization sweep on the 42-channel SSD configuration.
@@ -1601,7 +1618,9 @@ p         = 0.022798214256
 done_at   = 2026-08-21 20:14:45 UTC+8
 ```
 
-## 2026-08-20 - Llama 3 70B Layer-Weight QD1 Harness
+## 2026-08-20
+
+**Llama 3 70B Layer-Weight QD1 Harness**
 
 Added `results/run_llama70b_layer_qd1.py` for the workload-derived experiment:
 one Llama 3 70B transformer block's FP16 weights as a single QD1 transfer.
@@ -1679,7 +1698,9 @@ No-timeout PopNet scaling run:
 - Measurement CSV: `results/link_scaling_4m_128m_measurements_20260820.csv`.
 - Estimate CSV: `results/llama70b_layer_4m_128m_estimates_20260820.csv`.
 
-## 2026-08-16 - QD1 Cold NAND vs Cache-Hot Read Sweep
+## 2026-08-16
+
+**QD1 Cold NAND vs Cache-Hot Read Sweep**
 
 Ran the requested QD1 4KB-4MB comparison with the corrected preconditioned
 read path under two SSD modes:
@@ -1713,7 +1734,7 @@ Finding:
 - The hot/cached mode still does not produce a PCIe-bottlenecked workload.
   Best hot gain in this QD1 sweep is 0.1287% at 2MB.
 
-## 2026-08-16 - Corrected Size x Queue-Depth Sweep
+**Corrected Size x Queue-Depth Sweep**
 
 Added a resumable two-dimensional sweep and plotter:
 
@@ -1761,7 +1782,7 @@ Follow-up 1MB-only QD line sweep:
   UCIe/PCIe `1.00017x`, PCIe utilization only `0.0313%` of the modeled
   16 B/cycle PCIe peak. The QD trend still does not approach PCIe saturation.
 
-## 2026-08-16 - Corrected QD1 PCIe/UCIe Full Size Sweep Complete
+**Corrected QD1 PCIe/UCIe Full Size Sweep Complete**
 
 Ran the full queue-depth-1 PCIe/UCIe size sweep again after the Milestone 9
 fixes: preconditioning writes before reads and `sample_nocache.cfg` to force
@@ -1805,7 +1826,9 @@ Interpretation:
 - These numbers replace the old 2026-07-31 sweep results, which were based on
   non-representative unwritten-LPN reads.
 
-## 2026-08-06 - Milestone 7 Basic Queue-Depth Path Implemented
+## 2026-08-06
+
+**Milestone 7 Basic Queue-Depth Path Implemented**
 
 Implemented the first working multi-outstanding-request path needed to search
 for a PCIe bottleneck.
@@ -1857,7 +1880,9 @@ for a PCIe bottleneck.
   and compare batch makespan/throughput to find where PCIe flattens before
   UCIe.
 
-## 2026-07-31 (cont'd) - Corrected Cold-NAND Read Workload Identified
+## 2026-07-31
+
+**Corrected Cold-NAND Read Workload Identified**
 
 Follow-up to Milestone 9 after the unwritten-LPN bug was found.
 
@@ -1905,7 +1930,7 @@ Follow-up to Milestone 9 after the unwritten-LPN bug was found.
   before the PCIe-vs-UCIe gain can be fairly measured in a bandwidth-bound
   regime.
 
-## 2026-07-31 (cont'd) - Root Cause of the 4KB-32KB Flat Region + Concurrency Feasibility
+**Root Cause of the 4KB-32KB Flat Region + Concurrency Feasibility**
 
 Same-day follow-up to the entry directly below. While explaining the sweep
 results, a sharp question surfaced a real problem with the sweep itself:
@@ -2006,7 +2031,7 @@ per-simlet design.
   open item. Given Finding 1 above, this run's result would also have needed
   the Milestone 9 fix to be meaningful anyway, so not worth resuming as-is.
 
-## 2026-07-31 - PCIe vs. UCIe Full Size Sweep (4KB-4MB) + PopNet -T Bug
+**PCIe vs. UCIe Full Size Sweep (4KB-4MB) + PopNet -T Bug**
 
 Follow-up to the 2026-07-29 entry below. That entry answered the advisor's
 go/no-go question with 3 sizes (4KB/64KB/1MB); this extends it to a full
@@ -2085,7 +2110,9 @@ UCIe in this pipeline, now confirmed across three orders of magnitude of
 request size rather than a single point, with the growth trend itself
 visibly plateauing rather than accelerating toward significance.
 
-## 2026-07-29 - PCIe vs. UCIe Interconnect Throughput Gain (Advisor Ask)
+## 2026-07-29
+
+**PCIe vs. UCIe Interconnect Throughput Gain (Advisor Ask)**
 
 ### What Changed
 
@@ -2159,7 +2186,9 @@ visibly plateauing rather than accelerating toward significance.
   conclusion, but this is not verified. Flagged as a follow-up if the
   advisor wants to push further later.
 
-## 2026-07-10 09:45 CST - TOGSim DramLegoSim Backend
+## 2026-07-10
+
+**09:45 CST - TOGSim DramLegoSim Backend**
 
 ### What Changed
 
@@ -2292,7 +2321,9 @@ visibly plateauing rather than accelerating toward significance.
 - Did not change `main.cc`, the trace-file interface, or the normal Python
   launch path.
 
-## 2026-07-06 22:56 CST
+## 2026-07-06
+
+**22:56 CST**
 
 ### PopNet Phase-2 Integration
 
@@ -2578,7 +2609,9 @@ visibly plateauing rather than accelerating toward significance.
   - round 2 consumes those delay records;
   - LegoSim detects convergence and exits.
 
-## 2026-07-02 20:53 CST
+## 2026-07-02
+
+**20:53 CST**
 
 ### Active LegoSim Handshake
 
@@ -2709,7 +2742,9 @@ visibly plateauing rather than accelerating toward significance.
 - Extend the request protocol to carry logical offset/LBA instead of relying on
   the SimpleSSD simlet's internal sequential offset cursor.
 
-## 2026-06-30 16:06 CST
+## 2026-06-30
+
+**16:06 CST**
 
 ### Goal/Architecture Updates
 

@@ -24,10 +24,16 @@
 #include "sim/engine.hh"
 #include "simplessd/util/simplessd.hh"
 #include "ssd_ipc_protocol.h"
+#include "ssd_ipc_trace.h"
 
 namespace {
 
 const char kInterCmdHead[] = "[INTERCMD]";
+
+NUSSD::SsdIpcTrace &protocolTrace() {
+  static NUSSD::SsdIpcTrace trace("SSD", "ssd.events.tsv");
+  return trace;
+}
 
 // --- Read-path command/data leg split -----------------------------------
 // See PyTorchSim/TOGSim/src/DramLegoSim.cc for the full rationale (search
@@ -416,6 +422,8 @@ int runRuntimeIpc(const Options &options, Engine &engine,
       std::cerr << "Failed to receive complete SSD IPC request." << std::endl;
       return 4;
     }
+    protocolTrace().emit("SSD_REQUEST_FIFO_RECEIVED", request, currentCycle,
+                         engine.getCurrentTick());
 
     const long desc =
         request.request_id <=
@@ -433,6 +441,8 @@ int runRuntimeIpc(const Options &options, Engine &engine,
     const InterChiplet::TimeType arrivalCycle = InterChiplet::readSync(
         currentCycle, options.npuX, options.npuY, options.ssdX,
         options.ssdY, static_cast<int>(requestBytes), desc);
+    protocolTrace().emit("SSD_REQUEST_ARRIVED", request, arrivalCycle,
+                         engine.getCurrentTick());
 
     NUSSD::SsdIpcResponse response;
     response.request_id = request.request_id;
@@ -458,6 +468,8 @@ int runRuntimeIpc(const Options &options, Engine &engine,
         submitEvent = engine.allocateEvent([&](uint64_t) {
           BIL::BIO bio;
           response.submitted_tick_ps = engine.getCurrentTick();
+          protocolTrace().emit("SSD_BIO_SUBMITTED", request, arrivalCycle,
+                               response.submitted_tick_ps);
           bio.id = request.request_id;
           bio.type = bioType;
           bio.offset = request.offset_bytes;
@@ -465,6 +477,8 @@ int runRuntimeIpc(const Options &options, Engine &engine,
           bio.callback = [&](uint64_t completedID) {
             if (completedID == request.request_id) {
               response.completed_tick_ps = engine.getCurrentTick();
+              protocolTrace().emit("SSD_BIO_COMPLETED", request, arrivalCycle,
+                                   response.completed_tick_ps);
               done = true;
             }
           };
@@ -526,10 +540,14 @@ int runRuntimeIpc(const Options &options, Engine &engine,
     const InterChiplet::TimeType returnedCycle = InterChiplet::writeSync(
         completionCycle, options.ssdX, options.ssdY, options.npuX,
         options.npuY, static_cast<int>(responseBytes), desc);
+    protocolTrace().emit("SSD_RESPONSE_TRANSFER_RESOLVED", request, returnedCycle,
+                         response.completed_tick_ps, response.status);
     currentCycle = std::max(completionCycle,
                             static_cast<uint64_t>(returnedCycle));
 
     if (shutdown) {
+      protocolTrace().emit("SSD_SHUTDOWN", request, currentCycle,
+                           engine.getCurrentTick(), response.status);
       break;
     }
   }
