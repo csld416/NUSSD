@@ -13,9 +13,9 @@ PyTorchSim / TOGSim  <->  LegoSim/interchiplet  <->  SimpleSSD
 
 The FIFO carries protocol messages such as request ID, operation, logical offset, and length. Matching LegoSim events carry simulated command and response sizes and resolve their arrival cycles.
 
-## Before Starting
+## Before Starting a Full Workload
 
-The following binaries must already exist:
+The quick protocol demo builds its small NPU-side client automatically. A full PyTorchSim workload requires all of the following binaries:
 
 ```text
 PytorchSim-S/TOGSim/build/bin/Simulator
@@ -31,9 +31,28 @@ cmake --build SimpleSSD-Standalone/build --target simplessd-legosim -j2
 
 TOGSim also needs to be rebuilt after its bridge sources change. Its current build requires the project-compatible compiler and Conan dependencies.
 
-## Start the Runtime Bridge
+## Quick Protocol Demonstration
 
-From the repository root, load the prepared environment:
+The easiest way to watch the NPU-side client and SimpleSSD cooperate is:
+
+```bash
+./run.sh
+```
+
+The script builds its small protocol client when needed, creates an isolated run directory, waits briefly for a monitor to attach, and starts LegoSim plus the runtime SimpleSSD wrapper. Its human-editable toggle section controls request offset/length, tracing, monitor delay, and whether SimpleSSD is rebuilt.
+
+In a second terminal, run:
+
+```bash
+cd /home/csld/SIM
+./run.sh monitor
+```
+
+The `monitor` command automatically follows the latest demo; no run-directory or LegoSim command needs to be copied. After a run, `./run.sh path` prints its output directory.
+
+## Start a Full PyTorchSim Workload
+
+For the full PyTorchSim launcher path, load the prepared environment:
 
 ```bash
 source config/nussd_runtime.env
@@ -58,7 +77,26 @@ INTERVAL=1 \
 
 The run index may not be `0`; use the exact path printed by the launcher.
 
-## Main Toggles
+## Quick-Demo Toggles
+
+For `./run.sh`, edit the toggle block at the top of [run.sh](run.sh):
+
+| Variable | Purpose |
+|---|---|
+| `NUSSD_PROTOCOL_TRACE` | Set to `1` for live monitor events or `0` to disable them |
+| `REQUEST_OFFSET_BYTES` | Logical SSD byte offset used by the demo read |
+| `REQUEST_LENGTH_BYTES` | Number of bytes requested by the demo read |
+| `MONITOR_ATTACH_DELAY_SECONDS` | Delay before launch, giving the second terminal time to attach |
+| `MONITOR_REFRESH_SECONDS` | Refresh interval used by `./run.sh monitor` |
+| `REBUILD_SIMPLESSD` | Set to `1` to rebuild `simplessd-legosim` before running |
+
+Each value can also be overridden for one invocation, for example:
+
+```bash
+REQUEST_LENGTH_BYTES=16384 ./run.sh
+```
+
+## Full-Workload Toggles
 
 Edit [config/nussd_runtime.env](config/nussd_runtime.env) before sourcing it, or override a value afterward in the same shell.
 
@@ -70,6 +108,22 @@ Edit [config/nussd_runtime.env](config/nussd_runtime.env) before sourcing it, or
 | `TOGSIM_LEGOSIM_DRAM_NOC` | Enable the DRAM PopNet phase when the DRAM service is active | Use its no-op phase-two path |
 
 Other useful settings in the file select the LegoSim root, SimpleSSD executable/configurations, TOGSim log directory, and debug level.
+
+The full-workload configuration also selects `TOGSIM_SSD_TRACE_DIR`,
+`TOGSIM_SSD_TRACE_NAME`, and `TOGSIM_SSD_PLACEMENT_ALIGNMENT`. Before each
+streamed module executes, Python writes:
+
+```text
+<TOGSIM_SSD_TRACE_DIR>/<TOGSIM_SSD_TRACE_NAME>/
+├── model_weight_placements.tsv
+└── model_weight_layout.tsv
+```
+
+The active placement manifest maps each materialized tensor's half-open host
+range `[host_base, host_end)` to a stable, aligned logical SSD range. TOGSim
+uses the same record both to recognize a weight DMA and calculate its SSD
+offset. The layout file records every tensor placement observed so far in the
+current Python process.
 
 Tracing flushes every event so a human can watch it immediately. It does not change simulated cycles, but it adds host-side file I/O and should normally be disabled for performance sweeps:
 
@@ -118,7 +172,9 @@ The NPU and SSD records should have the same request ID, operation, offset, leng
 The current bridge proves that TOGSim and SimpleSSD can cooperate through the established runtime protocol, but it is not yet the final research configuration:
 
 - Runtime storage requests are blocking queue-depth one.
-- TOGSim currently maps every weight read to temporary logical SSD offset zero.
+- Logical SSD placements currently allocate tensors in first-seen order within
+  one Python workload process; the simulator models timing and does not copy
+  real tensor contents into an SSD image.
 - The generated SSD phase-two process is still `/bin/true`; the runtime path does not yet use the final UCIe/PopNet link topology.
 - TOGSim currently issues reads; the shared protocol also defines write, flush, and trim operations for later integration.
 

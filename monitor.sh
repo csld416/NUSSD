@@ -32,7 +32,7 @@ monitor_bridge() {
         echo "============================================================"
         echo "[Processes]"
         for process_spec in \
-            "TOGSim|/Simulator .*--config" \
+            "NPU client|(/Simulator .*--config|runtime_protocol_client)" \
             "LegoSim|interchiplet .*legosim.yml" \
             "SimpleSSD|simplessd-legosim .*--runtime-ipc"; do
             local label="${process_spec%%|*}"

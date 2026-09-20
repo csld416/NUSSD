@@ -40,6 +40,8 @@ results/*_runs/
 # Scratch / local run bookkeeping
 tmpReport.txt
 .monitor_done_times.tsv
+/runtime_results/
+/runtime_metadata/
 
 # Compiled objects / libraries / binaries
 *.o

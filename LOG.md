@@ -1,5 +1,17 @@
 # Project Log (Rule: the more recent, the more on file top)
 
+## 2026-09-20
+
+**Unified runtime weight placement and address translation**
+
+- Added `PyTorchSimFrontend/weight_placement.py` to discover materialized parameter addresses, assign stable 4 KiB-aligned logical SSD offsets by tensor name, and atomically publish both the currently active host-to-SSD placement manifest and the cumulative logical layout.
+- Updated the small matrix-multiply test plus streamed TinyLlama, Llama 2, and GPT-NeoX tests to use the shared placement writer instead of duplicated range-dump and merge logic, giving the first full-system smoke test an explicitly registered weight.
+- Changed TOGSim weight classification to validate the entire half-open DMA range against `model_weight_placements.tsv` and translate it to `ssd_base + (host_address - host_base)`. This removes the temporary offset-zero mapping and fixes the prior inclusive-end boundary ambiguity.
+- Added default placement metadata paths and alignment to `config/nussd_runtime.env`, documented the manifest behavior in `USAGE.md`, and left compilation and runtime validation for the user to execute explicitly.
+- Rebuilt TOGSim from a clean Linux build tree after preserving the stale `/workspace/...` CMake cache under the ignored `build/backups` area. Installed repository-local CMake 3.31, Conan 1.66, and GCC 10 tooling without changing system packages; regenerated Conan dependencies with the existing old-libstdc++ ABI; and changed TOGSim's unused C++23 request to the C++20 level actually required by Ramulator. Verified `Simulator`, `ssd_simlet`, and `dram_simlet` build successfully, the executable has no unresolved shared libraries, and the original `cmake --build ... --target help` command now works from the normal shell.
+- Validated the real `tests/test_matmul.py` path through PyTorchSim, TOGSim, LegoSim/interchiplet, and runtime SimpleSSD. Added an INFO-level successful-translation record containing the matched tensor, host range, request length, SSD base, and translated offset; added a 4 KiB validation sentinel so the real 2 MiB matrix weight maps to a demonstrably nonzero SSD offset; and adjusted only this FP16 matmul's numerical tolerance to `rtol=1e-2, atol=1e-1` after an SSD-disabled baseline measured the identical accelerator/CPU difference (`max_abs=0.15625`, `mean_abs=0.0107502546`). The accepted run translated the weight to offset 4096, completed one matching 2,097,152-byte SimpleSSD read with `SUCCESS` at every traced stage, completed shutdown cleanly, and printed `Matmul Forward Test Passed`.
+- Strengthened the address-translation proof with a real non-base NPU DMA. The matmul now registers a larger weight backing allocation but passes a contiguous view beginning four rows (8192 bytes) into it, with a runtime assertion that the NPU data pointers retain that displacement. In the accepted `matmul_subrange_20260920_01` run, the manifest assigned the backing allocation SSD base 4096, TOGSim observed host displacement 8192 and translated it to SSD offset 12288, the NPU and SSD protocol streams carried the same 2,097,152-byte request at offset 12288, SimpleSSD completed exactly one matching read, and the matmul passed.
+
 ## 2026-09-19
 
 **Runtime SimpleSSD IPC and live observability**
@@ -15,6 +27,7 @@
 - Deferred follow-up work: implement stable tensor/TOG-address to logical SSD-offset translation, replace the SSD phase-2 placeholder with the desired interconnect model, and extend the blocking QD1 protocol path if concurrent outstanding storage requests are required.
 - Added optional live protocol observability. TOGSim and SimpleSSD now emit separate append-only TSV event streams under `<run_dir>/live`, correlated by request ID and recording protocol stages, request fields, LegoSim cycles, SimpleSSD ticks, and completion status. Extended `monitor.sh` with a bridge mode that reads these files without participating in the simulation. A traced 4 KiB live smoke test completed with matching request data, zero protocol errors, and a clean shutdown.
 - Added `config/nussd_runtime.env` as the sourceable runtime/trace toggle configuration and `USAGE.md` as the human-readable start, monitoring, toggle, expected-output, and current-limitations guide.
+- Added a permanent `run.sh` protocol demonstration and source-controlled NPU-side demo client. The script centralizes user toggles, builds the client when necessary, generates the LegoSim YAML and isolated output directory, and reduces normal operation to `./run.sh` plus `./run.sh monitor` in a second terminal.
 
 ## 2026-09-18
 
