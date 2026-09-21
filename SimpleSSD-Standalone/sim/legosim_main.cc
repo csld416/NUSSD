@@ -425,11 +425,10 @@ int runRuntimeIpc(const Options &options, Engine &engine,
     protocolTrace().emit("SSD_REQUEST_FIFO_RECEIVED", request, currentCycle,
                          engine.getCurrentTick());
 
-    const long desc =
-        request.request_id <=
-                static_cast<uint64_t>(std::numeric_limits<long>::max())
-            ? static_cast<long>(request.request_id)
-            : 0;
+    // Request identity belongs to the FIFO protocol. LegoSim descriptors must
+    // remain zero so the descriptor-less SEND and the following READ/WRITE
+    // transfer match the PopNet record on later fixed-point rounds.
+    constexpr long desc = 0;
     const uint64_t requestBytes = requestWireBytes(request);
     if (requestBytes >
         static_cast<uint64_t>(std::numeric_limits<int>::max())) {

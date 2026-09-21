@@ -34,7 +34,8 @@ monitor_bridge() {
         for process_spec in \
             "NPU client|(/Simulator .*--config|runtime_protocol_client)" \
             "LegoSim|interchiplet .*legosim.yml" \
-            "SimpleSSD|simplessd-legosim .*--runtime-ipc"; do
+            "SimpleSSD|simplessd-legosim .*--runtime-ipc" \
+            "PopNet|popnet .*delayInfo.txt"; do
             local label="${process_spec%%|*}"
             local pattern="${process_spec#*|}"
             local pid

@@ -8,7 +8,10 @@ With the runtime SSD path enabled, the PyTorchSim launcher asks LegoSim/interchi
 
 ```text
 PyTorchSim / TOGSim  <->  LegoSim/interchiplet  <->  SimpleSSD
-   NPU requests             link timing             storage timing
+   NPU requests          synchronization             storage timing
+                               |
+                            PopNet
+                    NPU--SSD network timing
 ```
 
 The FIFO carries protocol messages such as request ID, operation, logical offset, and length. Matching LegoSim events carry simulated command and response sizes and resolve their arrival cycles.
@@ -18,8 +21,9 @@ The FIFO carries protocol messages such as request ID, operation, logical offset
 The quick protocol demo builds its small NPU-side client automatically. A full PyTorchSim workload requires all of the following binaries:
 
 ```text
-PytorchSim-S/TOGSim/build/bin/Simulator
+build/togsim/bin/Simulator
 LEGOSIM_MICRO/interchiplet/bin/interchiplet
+LEGOSIM_MICRO/popnet_chiplet/build/popnet
 SimpleSSD-Standalone/build/simplessd-legosim
 ```
 
@@ -30,6 +34,12 @@ cmake --build SimpleSSD-Standalone/build --target simplessd-legosim -j2
 ```
 
 TOGSim also needs to be rebuilt after its bridge sources change. Its current build requires the project-compatible compiler and Conan dependencies.
+
+With the configured out-of-tree build used by `config/nussd_runtime.env`, rebuild it with:
+
+```bash
+cmake --build build/togsim --target Simulator -j2
+```
 
 ## Quick Protocol Demonstration
 
@@ -103,11 +113,40 @@ Edit [config/nussd_runtime.env](config/nussd_runtime.env) before sourcing it, or
 | Variable | `1` | `0` |
 |---|---|---|
 | `TOGSIM_LEGOSIM_SSD` | Route weight DMA reads to the live SimpleSSD process | Use the non-live SSD path |
+| `TOGSIM_LEGOSIM_SSD_NOC` | Run phase-two PopNet for the NPU--SSD link | Use the no-op phase-two process |
 | `NUSSD_PROTOCOL_TRACE` | Write live NPU and SSD protocol events | Disable per-request event files |
 | `TOGSIM_LEGOSIM_DRAM` | Enable the separate DRAM LegoSim service | Keep the normal DRAM path |
 | `TOGSIM_LEGOSIM_DRAM_NOC` | Enable the DRAM PopNet phase when the DRAM service is active | Use its no-op phase-two path |
 
 Other useful settings in the file select the LegoSim root, SimpleSSD executable/configurations, TOGSim log directory, and debug level.
+
+The default SSD NoC profile models the existing UFS 4.0 raw-link baseline:
+
+```text
+TOGSIM_LEGOSIM_SSD_NOC_ROUNDS=3
+TOGSIM_LEGOSIM_SSD_POPNET_FLIT_WORDS=1
+TOGSIM_LEGOSIM_SSD_POPNET_CLOCK_RATE=0.725
+TOGSIM_LEGOSIM_SSD_POPNET_TOPOLOGY=.../line_2_ufs4.gv
+```
+
+The runtime bridge uses nanoseconds as LegoSim's common time unit. One 64-bit
+word per PopNet cycle at 0.725 cycles/ns represents approximately 5.8 GB/s.
+The launcher gives the same flit-word value to both LegoSim's benchmark
+generator and PopNet, so payload size is preserved across the phase boundary.
+The topology's edge weight adds the fixed propagation component.
+For reads, PopNet models a 64-byte command from the NPU to the SSD and the
+full payload from the SSD back to the NPU. PopNet runs after phase one, so the
+launcher uses multiple rounds and reports the last completed round, where the
+calculated network delay has been fed back into TOGSim.
+
+The launcher treats the PopNet phase as failed unless every child exits with
+status zero, `delayInfo.txt` is nonempty, and round 2 reports that it loaded at
+least one delay record. A communication-order mismatch that makes LegoSim
+cancel the delay table is also a hard error rather than a timing-free pass.
+
+`TOGSIM_LEGOSIM_SSD_BANDWIDTH_GBPS` is reserved for a future analytical link
+and has no effect while PopNet is active. PopNet bandwidth is controlled by
+its flit size, clock rate, and topology parameters above.
 
 The full-workload configuration also selects `TOGSIM_SSD_TRACE_DIR`,
 `TOGSIM_SSD_TRACE_NAME`, and `TOGSIM_SSD_PLACEMENT_ALIGNMENT`. Before each
@@ -175,7 +214,10 @@ The current bridge proves that TOGSim and SimpleSSD can cooperate through the es
 - Logical SSD placements currently allocate tensors in first-seen order within
   one Python workload process; the simulator models timing and does not copy
   real tensor contents into an SSD image.
-- The generated SSD phase-two process is still `/bin/true`; the runtime path does not yet use the final UCIe/PopNet link topology.
+- The current PopNet profile is a raw UFS 4.0 link model; it does not yet
+  include full UniPro/UFS protocol overheads, and the runtime request path is
+  still blocking queue-depth one, so it cannot produce multi-request link
+  contention.
 - TOGSim currently issues reads; the shared protocol also defines write, flush, and trim operations for later integration.
 
 These limitations mean the bridge is appropriate for protocol verification now, but not yet for final bottleneck measurements.
